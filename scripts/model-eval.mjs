@@ -289,6 +289,7 @@ async function loadSamples() {
     };
   }
   const out = [];
+  const mcpDiag = []; // why each CSP produced nothing, surfaced in the report
   for (const csp of ['aws', 'gcp', 'azure']) {
     try {
       const res = await fetch(`${API}/mcp`, {
@@ -296,18 +297,28 @@ async function loadSamples() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MCP_TOKEN}` },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_releases', arguments: { csp, format: 'source', limit: Math.ceil(SAMPLES / 3) } } }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      // Surface a JSON-RPC error (e.g. an invalid/wrong-type MCP token rejected
+      // by format="source") instead of silently falling back to fixtures.
+      if (data?.error) { mcpDiag.push(`${csp}: ${data.error.message || JSON.stringify(data.error)}`); continue; }
+      if (!res.ok) { mcpDiag.push(`${csp}: HTTP ${res.status}`); continue; }
       const text = data?.result?.content?.[0]?.text || '[]';
       const arr = JSON.parse(text.replace(/\n\n---[\s\S]*$/, ''));
+      if (!arr.length) { mcpDiag.push(`${csp}: 0 source articles returned`); continue; }
       // Carry csp so the eval can build the same vendor region/entity hints
       // production uses (buildVendorPromptHints keys off row.csp).
       for (const a of arr) out.push({ title: a.title, description: a.description, csp });
-    } catch { /* fall through to whatever we have */ }
+    } catch (e) {
+      mcpDiag.push(`${csp}: ${String(e.message).slice(0, 100)}`);
+    }
   }
   if (!out.length) {
+    // Report the ACTUAL reason (token rejected? empty? HTTP error?) so a failed
+    // MCP fetch is diagnosable from the report, not misread as "no data".
+    const why = mcpDiag.length ? `: ${mcpDiag.join(' | ')}` : '';
     return {
       samples: FIXTURES.slice(0, SAMPLES),
-      source: 'built-in fixtures (MCP fetch returned nothing)',
+      source: `built-in fixtures (MCP fetch returned nothing${why})`,
       degraded: true,
     };
   }
