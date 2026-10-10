@@ -23,10 +23,20 @@ on:
         required: false
         type: string
       samples:
-        description: 'Number of sample articles'
+        description: 'Number of sample articles (use 30+ for a decision-grade run)'
         required: false
-        default: '9'
+        default: '30'
         type: string
+      with_review:
+        description: 'Run the production second-pass AI review (measures the full card a user sees; doubles AI calls)'
+        required: false
+        default: false
+        type: boolean
+      retry_on_flag:
+        description: 'Run production''s single quality-retry on cards that fail the gate'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -56,7 +66,12 @@ jobs:
           # to evaluate on real vendor-original text instead of built-in fixtures.
           MCP_TOKEN: ${{ secrets.MCP_TOKEN }}
           EVAL_MODELS: ${{ github.event.inputs.models }}
-          EVAL_SAMPLES: ${{ github.event.inputs.samples || '9' }}
+          EVAL_SAMPLES: ${{ github.event.inputs.samples || '30' }}
+          # Opt-in passes (default off on the schedule). with_review runs the
+          # production second-pass AI review so the eval reflects the full card
+          # a user sees; retry_on_flag mirrors the live single quality-retry.
+          EVAL_WITH_REVIEW: ${{ github.event.inputs.with_review == 'true' && '1' || '' }}
+          EVAL_RETRY_ON_FLAG: ${{ github.event.inputs.retry_on_flag == 'true' && '1' || '' }}
           # Reasoning models spend tokens before emitting JSON; a tight budget
           # truncates them into parse_fail and disqualifies them for a reason
           # unrelated to Korean quality. Matches the budget the current model
