@@ -1345,14 +1345,17 @@ function applyQualitySuggestions(record, review) {
   return next;
 }
 
-async function reviewTranslationQualityWithAI(env, row, record, lang, hint = '') {
+// Pure: build the review-model messages for one card. Extracted from
+// reviewTranslationQualityWithAI so the offline eval (scripts/model-eval.mjs)
+// can run the SAME second-pass review production runs, without an env/AI call.
+function buildReviewMessages(row, record, lang, hint = '') {
   const reviewInput = JSON.stringify({
     original_title: row.title_en,
     original_description: String(row.description_en || '').slice(0, 1500),
     region_guidance: buildVendorPromptHints(row),
     translated: { title: record.title, summary: record.summary, target: record.target, features: record.features, regions: record.regions, status: record.status },
   });
-  
+
   const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
   const sysRules = getTranslationPrompt(lang).rules;
   const koreanFluencyChecks = lang === 'ko' ? `
@@ -1365,7 +1368,7 @@ Korean fluency — fix these if present, using the English original as the sourc
 - Reader instructions (참조하세요, 사용하세요), English stems with Korean endings (contributed하거나), or invented acronyms (TLaD)
 - Include "summary" in the output JSON when you rewrite it
 ` : '';
-  
+
   const reviewPrompt = `You review ${profile.name} cloud news cards. Compare the translated/summarized fields against the original English and check these rules:
 
 ${sysRules}
@@ -1384,25 +1387,39 @@ OUTPUT JSON with corrected fields only. Omit fields that are correct.
 If you cannot find any real errors after thorough review, output: {"pass":true}`;
 
   const reviewPromptWithHint = hint ? `${reviewPrompt}\n\n=== 추가 지시 ===\n${hint}` : reviewPrompt;
+  return {
+    messages: [{ role: 'system', content: reviewPromptWithHint }, { role: 'user', content: reviewInput }],
+    maxTokens: lang === 'ko' ? 640 : 384,
+  };
+}
+
+// Pure: apply a parsed reviewer response to a card. Returns the same shape the
+// live review path returns so the eval and production stay in lockstep.
+function applyReviewEdits(parsed, record, row, lang) {
+  if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
+  const fixed = { ...record };
+  if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (parsed.summary) fixed.summary = String(parsed.summary).replace(/\s+/g, ' ').trim();
+  if (parsed.status) {
+    let s = parsed.status;
+    if (typeof s === 'string') try { s = JSON.parse(s); } catch {}
+    fixed.status = JSON.stringify(Array.isArray(s) ? s : [s]);
+  }
+  if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp, lang);
+  if (parsed.target) fixed.target = parsed.target;
+  if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
+  return { pass: true, reasons: ['reviewer-applied-edit'], record: fixed };
+}
+
+async function reviewTranslationQualityWithAI(env, row, record, lang, hint = '') {
+  const { messages, maxTokens } = buildReviewMessages(row, record, lang, hint);
   try {
     const aiResp = await runAIWithFallback(env, getReviewModel(env), {
-      messages: [{ role: 'system', content: reviewPromptWithHint }, { role: 'user', content: reviewInput }],
-      max_tokens: lang === 'ko' ? 640 : 384, temperature: 0.1,
+      messages,
+      max_tokens: maxTokens, temperature: 0.1,
     });
     const parsed = parseAIResponse(aiResp);
-    if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
-    const fixed = { ...record };
-    if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
-    if (parsed.summary) fixed.summary = String(parsed.summary).replace(/\s+/g, ' ').trim();
-    if (parsed.status) {
-      let s = parsed.status;
-      if (typeof s === 'string') try { s = JSON.parse(s); } catch {}
-      fixed.status = JSON.stringify(Array.isArray(s) ? s : [s]);
-    }
-    if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp, lang);
-    if (parsed.target) fixed.target = parsed.target;
-    if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
-    return { pass: true, reasons: ['reviewer-applied-edit'], record: fixed };
+    return applyReviewEdits(parsed, record, row, lang);
   } catch (e) {
     console.error('review error:', e.message);
     return { pass: true, reasons: ['review-error'], record };
@@ -1773,6 +1790,29 @@ async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE
 }
 
 export { parseRSS };
+
+// Pure translation-pipeline pieces reused by the offline model evaluation
+// (scripts/model-eval.mjs) so it measures the SAME prompt, few-shot, JSON
+// schema, deterministic post-processing, and quality gate that production
+// runs — not a drifting paraphrase. None of these touch `env`/D1/AI, so this
+// export has no runtime effect on the Worker; it only lets the eval import the
+// real logic instead of maintaining a second copy that silently diverges.
+export {
+  getTranslationPrompt,
+  FEW_SHOT_KO,
+  FEW_SHOT_EN,
+  FEW_SHOT_JA,
+  TRANSLATION_JSON_SCHEMA,
+  cleanSourceDescription,
+  buildVendorPromptHints,
+  applyDeterministicFixes,
+  assessTranslationQuality,
+  parseAIResponse,
+  buildReviewMessages,
+  applyReviewEdits,
+  getReviewModel,
+  PRIMARY_MODEL,
+};
 
 export default {
   async scheduled(event, env, ctx) {
