@@ -39,10 +39,11 @@
 //                    and counts the review model's neurons. Default off.
 //   EVAL_REVIEW_MODEL review model override for EVAL_WITH_REVIEW (default: the
 //                    production review model, @cf/meta/llama-3.1-8b-instruct-fp8).
-//   MCP_TOKEN        OPTIONAL. Only used if D1 is unavailable. An mcp-type
-//                    bearer token for POST /mcp format="source". Normally the
-//                    eval reads source text straight from D1 (no token needed).
-//   EVAL_SKIP_D1     "1" to skip the D1 source path and use MCP/fixtures.
+//   MCP_TOKEN        OPTIONAL. Last-resort source. An mcp-type bearer token for
+//                    POST /mcp format="source". Normally unused: the eval reads
+//                    source text from D1 or public RSS without any token.
+//   EVAL_SKIP_D1     "1" to skip the D1 source path.
+//   EVAL_SKIP_RSS    "1" to skip the public-RSS source path.
 //   EVAL_D1_DB       D1 database name for the source query (default
 //                    cloud-whats-new; see wrangler.toml [[d1_databases]]).
 //   CURRENT_MODEL    baseline override; normally resolved from the live
@@ -66,6 +67,8 @@ import {
   buildReviewMessages,
   applyReviewEdits,
   getReviewModel,
+  parseRSS,
+  RSS_FEEDS,
 } from '../worker/index.js';
 
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -276,6 +279,33 @@ const FIXTURES = [
 // synthetic articles, which is enough for a smoke test but far too narrow to
 // justify switching the live model. The report says so loudly rather than
 // presenting those numbers as a verdict-grade comparison.
+// Pull vendor-original source text from the public RSS feeds (aws/gcp/azure) —
+// the SAME feeds production ingests (worker RSS_FEEDS + parseRSS). Needs no
+// credentials at all: these are public. This is the token-free source of the
+// real input production translates, used when D1/MCP are unavailable.
+async function loadFromRSS() {
+  const perCsp = Math.max(1, Math.ceil(SAMPLES / 3));
+  const out = [];
+  const diag = [];
+  for (const csp of ['aws', 'gcp', 'azure']) {
+    const url = RSS_FEEDS[csp];
+    if (!url) continue;
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'whats-new-kr-model-eval' } });
+      if (!res.ok) { diag.push(`${csp}: HTTP ${res.status}`); continue; }
+      const xml = await res.text();
+      const items = parseRSS(xml, csp)
+        .filter((it) => it.title && (it.description || '').length > 80)
+        .slice(0, perCsp);
+      if (!items.length) { diag.push(`${csp}: 0 usable items`); continue; }
+      for (const it of items) out.push({ title: it.title, description: it.description, csp });
+    } catch (e) {
+      diag.push(`${csp}: ${String(e.message).slice(0, 80)}`);
+    }
+  }
+  return { out, diag };
+}
+
 // Pull vendor-original source text straight from the D1 `articles` table via
 // `wrangler d1 execute --remote`, using the same CLOUDFLARE_API_TOKEN/ACCOUNT
 // the eval already needs for /ai/run. This is the token-free path for sourcing
@@ -328,12 +358,27 @@ async function loadSamples() {
     }
   }
 
-  // 3) live vendor-original text via MCP (needs an mcp-type MCP_TOKEN)
+  // 3) public vendor RSS feeds — no credentials at all. The same feeds
+  // production ingests, so this is the real input production translates.
+  if (process.env.EVAL_SKIP_RSS !== '1') {
+    try {
+      const { out, diag } = await loadFromRSS();
+      if (out.length) {
+        return { samples: out.slice(0, SAMPLES), source: `public vendor RSS feeds (${out.length} items)`, degraded: false };
+      }
+      if (diag.length) process.env._RSS_DIAG = diag.join(' | ').slice(0, 160);
+    } catch (e) {
+      process.env._RSS_DIAG = String(e.message || e).slice(0, 160);
+    }
+  }
+
+  // 4) live vendor-original text via MCP (needs an mcp-type MCP_TOKEN)
   if (!MCP_TOKEN) {
-    const d1why = process.env._D1_DIAG ? ` (D1 unavailable: ${process.env._D1_DIAG})` : '';
+    const d1why = process.env._D1_DIAG ? ` (D1: ${process.env._D1_DIAG})` : '';
+    const rsswhy = process.env._RSS_DIAG ? ` (RSS: ${process.env._RSS_DIAG})` : '';
     return {
       samples: FIXTURES.slice(0, SAMPLES),
-      source: `built-in fixtures (MCP_TOKEN not set${d1why})`,
+      source: `built-in fixtures (no token-free source available${d1why}${rsswhy})`,
       degraded: true,
     };
   }

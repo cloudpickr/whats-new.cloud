@@ -1811,6 +1811,7 @@ export {
   buildReviewMessages,
   applyReviewEdits,
   getReviewModel,
+  RSS_FEEDS,
   PRIMARY_MODEL,
 };
 
