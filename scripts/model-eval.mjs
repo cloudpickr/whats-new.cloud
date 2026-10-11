@@ -39,8 +39,12 @@
 //                    and counts the review model's neurons. Default off.
 //   EVAL_REVIEW_MODEL review model override for EVAL_WITH_REVIEW (default: the
 //                    production review model, @cf/meta/llama-3.1-8b-instruct-fp8).
-//   MCP_TOKEN        bearer token for POST /mcp format="source" (to pull real
-//                    vendor-original text); falls back to built-in fixtures.
+//   MCP_TOKEN        OPTIONAL. Only used if D1 is unavailable. An mcp-type
+//                    bearer token for POST /mcp format="source". Normally the
+//                    eval reads source text straight from D1 (no token needed).
+//   EVAL_SKIP_D1     "1" to skip the D1 source path and use MCP/fixtures.
+//   EVAL_D1_DB       D1 database name for the source query (default
+//                    cloud-whats-new; see wrangler.toml [[d1_databases]]).
 //   CURRENT_MODEL    baseline override; normally resolved from the live
 //                    deployment via GET /api/stats (see resolveCurrentModel).
 //   CURRENT_MODEL_FALLBACK  used only if /api/stats is unreachable.
@@ -272,6 +276,34 @@ const FIXTURES = [
 // synthetic articles, which is enough for a smoke test but far too narrow to
 // justify switching the live model. The report says so loudly rather than
 // presenting those numbers as a verdict-grade comparison.
+// Pull vendor-original source text straight from the D1 `articles` table via
+// `wrangler d1 execute --remote`, using the same CLOUDFLARE_API_TOKEN/ACCOUNT
+// the eval already needs for /ai/run. This is the token-free path for sourcing
+// the SAME input production translates (title_en + description_en) without the
+// mcp-type MCP_TOKEN that format="source" requires. The summary is NOT read —
+// each candidate model regenerates it, which is what we score.
+async function loadFromD1() {
+  const DB = process.env.EVAL_D1_DB || 'cloud-whats-new';
+  const perCsp = Math.max(1, Math.ceil(SAMPLES / 3));
+  // Balance across aws/gcp/azure, newest first, non-empty source body only.
+  const sql = ['aws', 'gcp', 'azure'].map((csp) =>
+    `SELECT csp, title_en, description_en, pub_date FROM articles ` +
+    `WHERE csp='${csp}' AND description_en IS NOT NULL AND length(description_en) > 80 ` +
+    `ORDER BY pub_date DESC LIMIT ${perCsp}`,
+  ).join(' UNION ALL ');
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+  // --json prints a [{ results: [...] }] envelope; --remote hits the deployed DB.
+  const { stdout } = await run('npx', [
+    'wrangler', 'd1', 'execute', DB, '--remote', '--json', '--command', sql,
+  ], { env: process.env, maxBuffer: 20 * 1024 * 1024 });
+  const parsed = JSON.parse(stdout);
+  const rows = (Array.isArray(parsed) ? parsed : [parsed])
+    .flatMap((r) => r?.results || []);
+  return rows.map((r) => ({ title: r.title_en, description: r.description_en, csp: r.csp }));
+}
+
 async function loadSamples() {
   // 1) explicit eval set file (most controlled/reproducible)
   const file = process.env.EVAL_SET_FILE;
@@ -280,11 +312,28 @@ async function loadSamples() {
     const arr = JSON.parse(readFileSync(file, 'utf8'));
     return { samples: arr.slice(0, SAMPLES), source: `EVAL_SET_FILE (${file})`, degraded: false };
   }
-  // 2) live vendor-original text via MCP (needs MCP_TOKEN)
+
+  // 2) vendor-original source straight from D1 (no MCP_TOKEN needed). Preferred
+  // because it reads the exact text production translates, using credentials
+  // the eval already has. Set EVAL_SKIP_D1=1 to force the MCP/fixtures path.
+  if (process.env.EVAL_SKIP_D1 !== '1' && ACCOUNT && TOKEN) {
+    try {
+      const d1 = await loadFromD1();
+      if (d1.length) {
+        return { samples: d1.slice(0, SAMPLES), source: `D1 articles table (${d1.length} rows via wrangler --remote)`, degraded: false };
+      }
+    } catch (e) {
+      // Fall through to MCP/fixtures, but remember why D1 was unavailable.
+      process.env._D1_DIAG = String(e.message || e).slice(0, 160);
+    }
+  }
+
+  // 3) live vendor-original text via MCP (needs an mcp-type MCP_TOKEN)
   if (!MCP_TOKEN) {
+    const d1why = process.env._D1_DIAG ? ` (D1 unavailable: ${process.env._D1_DIAG})` : '';
     return {
       samples: FIXTURES.slice(0, SAMPLES),
-      source: 'built-in fixtures (MCP_TOKEN not set)',
+      source: `built-in fixtures (MCP_TOKEN not set${d1why})`,
       degraded: true,
     };
   }
@@ -316,9 +365,10 @@ async function loadSamples() {
     // Report the ACTUAL reason (token rejected? empty? HTTP error?) so a failed
     // MCP fetch is diagnosable from the report, not misread as "no data".
     const why = mcpDiag.length ? `: ${mcpDiag.join(' | ')}` : '';
+    const d1why = process.env._D1_DIAG ? ` [D1 unavailable: ${process.env._D1_DIAG}]` : '';
     return {
       samples: FIXTURES.slice(0, SAMPLES),
-      source: `built-in fixtures (MCP fetch returned nothing${why})`,
+      source: `built-in fixtures (MCP fetch returned nothing${why})${d1why}`,
       degraded: true,
     };
   }
