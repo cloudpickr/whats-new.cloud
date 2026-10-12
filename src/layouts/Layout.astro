@@ -21,12 +21,12 @@ const {
   description = 'Amazon Web Services, Google Cloud, Microsoft Azure, Oracle Cloud 클라우드 최신 업데이트를 한국어로 요약합니다.',
   vendor = 'home',
   ogImage = '/og.png',
-  ogImageAlt = 'What\'s New 한국어 요약 공유 이미지',
+  ogImageAlt = 'What\'s New 새 소식 요약 공유 이미지',
   structuredData = [],
   lang = 'ko',
 } = Astro.props;
 const cspNames: Record<string, string> = NAV_LABELS;
-const siteName = 'What\'s New 한국어 요약';
+const siteName = 'What\'s New 새 소식 요약';
 // Canonical + hreflang: language is a ?lang attribute (ko omits it). Point each
 // hreflang at the same path with the right ?lang so search engines index the
 // language variants despite the query-string model.
@@ -218,7 +218,7 @@ const fontPreload: Record<string, string> = Object.fromEntries(
     <header>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex justify-between items-center">
         <a href="/" class="text-base sm:text-lg font-bold whitespace-nowrap shrink-0" style="color: var(--nav-brand-color);">
-          ☁️ What's New <span class="hidden sm:inline">한국어 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>
+          ☁️ What's New <span class="hidden sm:inline">새 소식 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>
         </a>
         <nav class="flex items-center h-full gap-0.5 sm:gap-1.5 min-w-0">
           {PROVIDER_IDS.map(c => (
@@ -226,12 +226,20 @@ const fontPreload: Record<string, string> = Object.fromEntries(
               {cspNames[c]}
             </a>
           ))}
-          <label class="sr-only" for="lang-select">언어 선택</label>
-          <select id="lang-select" class="lang-select ml-1.5" aria-label="언어 선택" data-current={activeLang.id}>
+          <div class="lang-switch" role="group" aria-label="언어 선택">
             {LANG_IDS.map((id) => (
-              <option value={id} selected={id === activeLang.id}>{LANGS[id].label}</option>
+              <button
+                type="button"
+                class={`lang-flag${id === activeLang.id ? ' is-active' : ''}`}
+                data-lang={id}
+                aria-label={LANGS[id].label}
+                aria-pressed={id === activeLang.id ? 'true' : 'false'}
+                title={LANGS[id].label}>
+                <span class="lang-flag__emoji" aria-hidden="true">{LANGS[id].flag}</span>
+                <span class="lang-flag__code" aria-hidden="true">{LANGS[id].code}</span>
+              </button>
             ))}
-          </select>
+          </div>
           <button id="theme-toggle" type="button" aria-label="다크 모드 전환" aria-pressed="false" class="ml-2 p-1.5 rounded transition-colors" style="color: var(--nav-item-color);">
             <svg id="icon-dark" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
             <svg id="icon-light" class="hidden w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
@@ -244,7 +252,7 @@ const fontPreload: Record<string, string> = Object.fromEntries(
     </main>
     <footer style="background-color: var(--color-surface); border-top: 1px solid var(--color-border);" class="mt-8">
       <div class="max-w-7xl mx-auto py-4 px-4 text-center text-xs" style="color: var(--color-text-secondary);">
-        © {new Date().getFullYear()} Cloud ☁️ What's New <span class="hidden sm:inline">한국어 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>. Not affiliated with Amazon Web Services, Google Cloud, Microsoft Azure, or Oracle Cloud. All trademarks are the property of their respective owners.
+        © {new Date().getFullYear()} Cloud ☁️ What's New <span class="hidden sm:inline">새 소식 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>. Not affiliated with Amazon Web Services, Google Cloud, Microsoft Azure, or Oracle Cloud. All trademarks are the property of their respective owners.
       </div>
     </footer>
     <script>
@@ -255,7 +263,6 @@ const fontPreload: Record<string, string> = Object.fromEntries(
       // URL (e.g. a shared link) always wins and is not overridden.
       function initLangSwitcher() {
         const LANGS = ['ko', 'en', 'ja'];
-        const sel = document.getElementById('lang-select') as HTMLSelectElement | null;
         const url = new URL(window.location.href);
         const urlLang = url.searchParams.get('lang');
 
@@ -273,14 +280,16 @@ const fontPreload: Record<string, string> = Object.fromEntries(
           try { localStorage.setItem('lang', urlLang); } catch { /* ignore */ }
         }
 
-        if (!sel) return;
-        sel.addEventListener('change', () => {
-          const next = sel.value;
-          try { localStorage.setItem('lang', next); } catch { /* ignore */ }
-          const u = new URL(window.location.href);
-          if (next === 'ko') u.searchParams.delete('lang');
-          else u.searchParams.set('lang', next);
-          window.location.assign(u.pathname + u.search + u.hash);
+        document.querySelectorAll<HTMLElement>('.lang-flag').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const next = btn.dataset.lang || 'ko';
+            if (!LANGS.includes(next)) return;
+            try { localStorage.setItem('lang', next); } catch { /* ignore */ }
+            const u = new URL(window.location.href);
+            if (next === 'ko') u.searchParams.delete('lang');
+            else u.searchParams.set('lang', next);
+            window.location.assign(u.pathname + u.search + u.hash);
+          });
         });
       }
       document.addEventListener('astro:page-load', initLangSwitcher);

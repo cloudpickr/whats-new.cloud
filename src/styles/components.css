@@ -174,22 +174,30 @@
 .share-filter-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
 .share-filter-btn.copied { color: var(--color-primary); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
 
-/* ---------- Language switcher (header) ---------- */
-.lang-select {
-  height: 30px; padding: 0 1.5rem 0 .5rem;
-  font-size: .8rem; font-family: inherit; line-height: 1;
+/* ---------- Language switcher (header, flag + code buttons) ---------- */
+.lang-switch { display: inline-flex; align-items: center; gap: 2px; margin-left: .375rem; }
+.lang-flag {
+  display: inline-flex; align-items: center; justify-content: center; gap: .2rem;
+  height: 30px; padding: 0 .4rem;
+  line-height: 1;
   color: var(--nav-item-color, var(--color-text-primary));
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--nav-item-color, var(--color-border)) 35%, transparent);
-  border-radius: var(--btn-radius, 8px);
-  cursor: pointer; outline: none;
-  -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right .4rem center;
-  transition: border-color .15s, color .15s;
+  background: transparent; border: none; border-radius: var(--btn-radius, 8px);
+  cursor: pointer; outline: none; opacity: .55;
+  transition: opacity .15s, background-color .15s, transform .1s;
 }
-.lang-select:hover { border-color: var(--color-primary); }
-.lang-select:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.lang-flag__emoji { font-size: 1.05rem; }
+.lang-flag__code { font-size: .7rem; font-weight: 700; letter-spacing: .02em; }
+.lang-flag:hover { opacity: .95; background: color-mix(in srgb, var(--nav-item-color, #888) 12%, transparent); }
+.lang-flag.is-active { opacity: 1; background: color-mix(in srgb, var(--color-primary) 16%, transparent); }
+.lang-flag:active { transform: scale(0.92); }
+.lang-flag:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* Larger tap targets on small screens; the 2-letter code keeps it legible even
+   where flag emoji fall back to letters (e.g. Windows). */
+@media (max-width: 640px) {
+  .lang-flag { height: 34px; padding: 0 .5rem; }
+  .lang-flag__emoji { font-size: 1.2rem; }
+  .lang-flag__code { font-size: .78rem; }
+}
 
 /* AWS: Cloudscape input — 2px border, blue on focus */
 [data-vendor="aws"] .search__input { border: 2px solid #7D8998; }
