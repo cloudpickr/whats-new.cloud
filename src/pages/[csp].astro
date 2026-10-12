@@ -19,7 +19,9 @@ Astro.response.headers.set(
 
 let articles: any[] = [];
 try {
-  const res = await callBackend<{ items?: any[] }>(`/api/articles?csp=${csp}&lang=ko&limit=80`, { items: [] });
+  // Keep the last 30 days rather than a fixed count, so high-volume CSPs
+  // (aws/gcp) still show a full month. limit is a safety ceiling.
+  const res = await callBackend<{ items?: any[] }>(`/api/articles?csp=${csp}&lang=ko&days=30&limit=500`, { items: [] });
   articles = res.items || [];
 } catch (e) { console.error(e); }
 
@@ -136,6 +138,11 @@ const structuredData = [
         </svg>
         <input type="search" id="search" placeholder="검색..." aria-label="업데이트 검색" autocomplete="off" class="search__input" />
       </div>
+      <button type="button" id="share-filter" class="share-filter-btn" aria-label="현재 필터 링크 복사" title="현재 필터 링크 복사">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98M18 8a3 3 0 10-3-3 3 3 0 003 3zM6 15a3 3 0 10-3-3 3 3 0 003 3zm12 7a3 3 0 10-3-3 3 3 0 003 3z"></path>
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -158,7 +165,11 @@ const structuredData = [
   <p id="no-results" class="hidden text-center py-16 text-sm" style="color: var(--color-text-secondary);">검색 결과가 없습니다.</p>
 
   <script>
-    // Bind search and filtering on page load/navigation
+    // Bind search and filtering on page load/navigation.
+    // URL params (?status=, ?q=) are READ on load to restore a shared/bookmarked
+    // view, but clicking a chip or typing does NOT rewrite the URL — that would
+    // churn history and feel like a refresh. The explicit "필터 링크 복사" button
+    // is the only thing that serializes the current filter state to a URL.
     function initSearchFilters() {
       const searchEl = document.getElementById('search') as HTMLInputElement;
       const wrappers = Array.from(document.querySelectorAll<HTMLElement>('#cards > .card-wrapper'));
@@ -178,18 +189,61 @@ const structuredData = [
         if (noResults) noResults.classList.toggle('hidden', visible > 0);
       }
 
+      function reflectActiveChip() {
+        document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
+          const on = b.dataset.filter === activeFilter && activeFilter !== '';
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+
+      // Restore state from the URL on load (shared/bookmarked link). Only accept
+      // a status that actually exists as a chip on this page.
+      const params = new URLSearchParams(window.location.search);
+      const urlStatus = params.get('status') || '';
+      const urlQuery = params.get('q') || '';
+      const validStatuses = Array.from(document.querySelectorAll<HTMLElement>('.filter-btn'))
+        .map(b => b.dataset.filter || '');
+      if (urlStatus && validStatuses.includes(urlStatus)) activeFilter = urlStatus;
+      if (urlQuery && searchEl) searchEl.value = urlQuery;
+      reflectActiveChip();
+      applyFilters();
+
       searchEl?.addEventListener('input', applyFilters);
 
       document.querySelectorAll<HTMLElement>('.filter-btn').forEach(btn => {
         btn.onclick = () => {
           const f = btn.dataset.filter || '';
           activeFilter = activeFilter === f ? '' : f;
-          document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
-            b.classList.toggle('is-active', b.dataset.filter === activeFilter && activeFilter !== '');
-            b.setAttribute('aria-pressed', b.dataset.filter === activeFilter && activeFilter !== '' ? 'true' : 'false');
-          });
+          reflectActiveChip();
           applyFilters();
+          // Intentionally NO URL update here (avoids refresh-like history churn).
         };
+      });
+
+      // Share button: serialize the CURRENT filter + search to a URL and copy it.
+      const shareBtn = document.getElementById('share-filter');
+      const shareLabel = shareBtn?.getAttribute('aria-label') || '현재 필터 링크 복사';
+      let shareResetTimer: ReturnType<typeof setTimeout> | undefined;
+      shareBtn?.addEventListener('click', async () => {
+        const u = new URL(window.location.href);
+        u.hash = '';
+        u.searchParams.delete('status');
+        u.searchParams.delete('q');
+        if (activeFilter) u.searchParams.set('status', activeFilter);
+        const q = (searchEl?.value || '').trim();
+        if (q) u.searchParams.set('q', q);
+        const link = u.toString();
+        try {
+          await navigator.clipboard.writeText(link);
+          shareBtn.classList.add('copied');
+          shareBtn.setAttribute('aria-label', '링크가 복사되었습니다');
+          clearTimeout(shareResetTimer);
+          shareResetTimer = setTimeout(() => {
+            shareBtn.classList.remove('copied');
+            shareBtn.setAttribute('aria-label', shareLabel);  // always the original
+          }, 1500);
+        } catch { /* clipboard blocked; no-op */ }
       });
     }
 
