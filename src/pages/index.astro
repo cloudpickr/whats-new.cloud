@@ -2,6 +2,9 @@
 import Layout from '../layouts/Layout.astro';
 import { callBackend } from '../lib/apiClient';
 import { PROVIDER_LIST } from '../lib/providers';
+import { resolveLang, LANGS } from '../lib/langs';
+
+const lang = resolveLang(Astro.url.searchParams.get('lang'));
 
 // Edge-cache the rendered HTML at Cloudflare (content refreshes on a 1-min
 // cron): 60s edge copy to cut repeat TTFB, 5-min stale-while-revalidate, and
@@ -15,7 +18,7 @@ const csps = PROVIDER_LIST;
 
 const data: Record<string, any[]> = {};
 const results = await Promise.all(
-  csps.map(c => callBackend<{ items?: any[] }>(`/api/articles?csp=${c.id}&lang=ko&limit=15`, { items: [] }))
+  csps.map(c => callBackend<{ items?: any[] }>(`/api/articles?csp=${c.id}&lang=${lang}&limit=15`, { items: [] }))
 );
 csps.forEach((c, i) => {
   data[c.id] = results[i].items || [];
@@ -56,6 +59,7 @@ const structuredData = [
   title="클라우드 최신 업데이트 | What's New 한국어 요약"
   description="AWS, Google Cloud, Microsoft Azure의 공식 업데이트를 읽기 쉬운 한국어 카드로 정리한 클라우드 릴리스 노트 대시보드입니다."
   vendor="home"
+  lang={lang}
   ogImageAlt="AWS, Google Cloud, Microsoft Azure 최신 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지"
   structuredData={structuredData}
 >
@@ -104,7 +108,7 @@ const structuredData = [
                       {a.title}
                     </p>
                     <time class="text-[11px] font-medium" style="color: var(--color-text-secondary);">
-                      {a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : ''}
+                      {a.pub_date ? new Date(a.pub_date).toLocaleDateString(LANGS[lang].bcp47, { month: 'short', day: 'numeric' }) : ''}
                     </time>
                   </div>
                 </div>
