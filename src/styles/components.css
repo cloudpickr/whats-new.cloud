@@ -161,6 +161,19 @@
 }
 .search__input::placeholder { color: var(--color-text-secondary); }
 
+/* ---------- Share-filter button (copies current filter+search as a URL) ---------- */
+.share-filter-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; flex: 0 0 auto;
+  color: var(--color-text-secondary); background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: var(--input-radius);
+  cursor: pointer; outline: none;
+  transition: color .15s, border-color .15s, background-color .15s;
+}
+.share-filter-btn svg { width: 1rem; height: 1rem; }
+.share-filter-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.share-filter-btn.copied { color: var(--color-primary); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+
 /* AWS: Cloudscape input — 2px border, blue on focus */
 [data-vendor="aws"] .search__input { border: 2px solid #7D8998; }
 [data-vendor="aws"][data-theme="dark"] .search__input { border-color: #5F6B7A; }

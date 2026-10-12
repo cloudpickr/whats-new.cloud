@@ -2057,17 +2057,24 @@ export default {
       const defaultLang = accept.startsWith('ja') ? 'ja' : accept.startsWith('en') ? 'en' : 'ko';
       const lang = url.searchParams.get('lang') || defaultLang;
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
+      // Optional rolling window: `days=30` keeps "the last N days" rather than a
+      // fixed card count, so high-volume CSPs (aws/gcp) still show a full month.
+      // Omitted → no date floor (back-compat for callers that only pass limit).
+      const daysRaw = parseInt(url.searchParams.get('days') || '0');
+      const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 0;
+      // `days` is a clamped integer, never user text, so inlining is injection-safe.
+      const floor = (alias) => (days ? ` AND ${alias}.pub_date >= datetime('now', '-${days} days')` : '');
 
       // Include untranslated articles as English fallback
       let query, params;
       if (lang === 'en' || !csp) {
-        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ?`;
+        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ?${floor('lc')}`;
         params = [lang];
         if (csp) { query += ' AND lc.csp = ?'; params.push(csp); }
       } else {
-        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ? AND lc.csp = ?
+        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ? AND lc.csp = ?${floor('lc')}
           UNION ALL
-          SELECT lc2.*, a2.title_en as original_title, 1 as is_fallback FROM localized_content lc2 JOIN articles a2 ON lc2.article_id = a2.id WHERE lc2.lang = 'en' AND lc2.csp = ? AND lc2.article_id NOT IN (SELECT article_id FROM localized_content WHERE lang = ? AND csp = ?)`;
+          SELECT lc2.*, a2.title_en as original_title, 1 as is_fallback FROM localized_content lc2 JOIN articles a2 ON lc2.article_id = a2.id WHERE lc2.lang = 'en' AND lc2.csp = ? AND lc2.article_id NOT IN (SELECT article_id FROM localized_content WHERE lang = ? AND csp = ?)${floor('lc2')}`;
         params = [lang, csp, csp, lang, csp];
       }
       query += ' ORDER BY pub_date DESC LIMIT ?';
