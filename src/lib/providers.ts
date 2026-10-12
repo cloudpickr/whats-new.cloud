@@ -99,6 +99,6 @@ export function isProvider(id: string | undefined): id is string {
 
 /** Short nav label for home + each provider (home has no Provider entry). */
 export const NAV_LABELS: Record<string, string> = {
-  home: "Cloud What's New",
+  home: "What's New in Cloud",
   ...Object.fromEntries(PROVIDER_LIST.map((p) => [p.id, p.nav])),
 };

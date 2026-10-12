@@ -28,17 +28,17 @@ const structuredData = [
   {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'What\'s New 한국어 요약',
+    name: "What's New in Cloud",
     url: Astro.site?.toString(),
-    inLanguage: 'ko-KR',
+    inLanguage: LANGS[lang].bcp47,
     description: 'AWS, Google Cloud, Microsoft Azure, Oracle Cloud의 최신 업데이트를 한국어로 요약한 클라우드 릴리스 노트 사이트입니다.',
   },
   {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: '클라우드 최신 업데이트 | What\'s New 한국어 요약',
+    name: "클라우드 최신 업데이트 | What's New in Cloud",
     url: new URL('/', Astro.site).toString(),
-    inLanguage: 'ko-KR',
+    inLanguage: LANGS[lang].bcp47,
     description: 'AWS, Google Cloud, Microsoft Azure, Oracle Cloud의 최신 업데이트를 한국어로 요약해 보여주는 클라우드 릴리스 노트 대시보드입니다.',
   },
   {
@@ -53,14 +53,39 @@ const structuredData = [
     })),
   },
 ];
+// Per-language UI strings for the home hero + page metadata.
+const HOME_UI: Record<string, { tagline: string; subtitle: string; title: string; description: string; ogAlt: string }> = {
+  ko: {
+    tagline: 'in Cloud',
+    subtitle: '핵심 클라우드 업데이트만 골라내어 깔끔하게 보여드립니다',
+    title: "클라우드 최신 업데이트 | What's New in Cloud",
+    description: 'AWS, Google Cloud, Microsoft Azure, Oracle Cloud의 공식 업데이트를 읽기 쉬운 카드로 정리한 클라우드 릴리스 노트 대시보드입니다.',
+    ogAlt: 'AWS, Google Cloud, Microsoft Azure 클라우드 새 소식을 요약한 공유 이미지',
+  },
+  en: {
+    tagline: 'in Cloud',
+    subtitle: 'The essential cloud updates, hand-picked and clearly summarized',
+    title: "Latest Cloud Updates | What's New in Cloud",
+    description: 'A dashboard of official AWS, Google Cloud, Microsoft Azure, and Oracle Cloud updates, summarized into easy-to-read cards.',
+    ogAlt: "What's New in Cloud — AWS, Google Cloud, Microsoft Azure update summaries",
+  },
+  ja: {
+    tagline: 'in Cloud',
+    subtitle: '重要なクラウドアップデートだけを厳選して分かりやすくお届けします',
+    title: "最新クラウドアップデート | What's New in Cloud",
+    description: 'AWS、Google Cloud、Microsoft Azure、Oracle Cloudの公式アップデートを読みやすいカードにまとめたダッシュボードです。',
+    ogAlt: "What's New in Cloud — AWS・Google Cloud・Microsoft Azure アップデートまとめ",
+  },
+};
+const h = HOME_UI[lang];
 ---
 
 <Layout
-  title="클라우드 최신 업데이트 | What's New 한국어 요약"
-  description="AWS, Google Cloud, Microsoft Azure의 공식 업데이트를 읽기 쉬운 한국어 카드로 정리한 클라우드 릴리스 노트 대시보드입니다."
+  title={h.title}
+  description={h.description}
   vendor="home"
   lang={lang}
-  ogImageAlt="AWS, Google Cloud, Microsoft Azure 최신 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지"
+  ogImageAlt={h.ogAlt}
   structuredData={structuredData}
 >
   <!-- Hero with glow background -->
@@ -69,12 +94,12 @@ const structuredData = [
     <div class="absolute -bottom-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20" style="background: var(--color-accent);"></div>
     
     <h1 class="text-3xl sm:text-5xl font-black mb-4 tracking-tight" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
-      ☁️ What's New <span class="bg-clip-text text-transparent bg-gradient-to-r" style="background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));">한국어 요약</span>
+      ☁️ What's New <span class="bg-clip-text text-transparent bg-gradient-to-r" style="background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));">{h.tagline}</span>
       <span class="text-xs font-semibold px-2 py-0.5 rounded-full ml-1" style="background: color-mix(in srgb, var(--color-primary) 15%, transparent); color: var(--color-primary); vertical-align: middle;">Beta</span>
     </h1>
     <p class="text-sm sm:text-lg max-w-xl mx-auto leading-relaxed" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
       Amazon Web Services · Google Cloud · Microsoft Azure · Oracle Cloud<br/>
-      <span class="font-medium">핵심 클라우드 업데이트만 골라내어 깔끔하게 보여드립니다</span>
+      <span class="font-medium">{h.subtitle}</span>
     </p>
   </div>
 

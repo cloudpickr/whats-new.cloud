@@ -1,6 +1,6 @@
-# ☁️ What's New 한국어 요약
+# ☁️ What's New in Cloud
 
-Amazon Web Services · Google Cloud · Microsoft Azure 클라우드 최신 업데이트를 한국어로 요약합니다.
+Amazon Web Services · Google Cloud · Microsoft Azure · Oracle Cloud 클라우드 최신 업데이트를 한국어로 요약합니다.
 
 **Live**: https://whats-new.kr
 
