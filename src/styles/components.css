@@ -174,29 +174,24 @@
 .share-filter-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
 .share-filter-btn.copied { color: var(--color-primary); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
 
-/* ---------- Language switcher (header, flag + code buttons) ---------- */
-.lang-switch { display: inline-flex; align-items: center; gap: 2px; margin-left: .375rem; }
-.lang-flag {
-  display: inline-flex; align-items: center; justify-content: center; gap: .2rem;
-  height: 30px; padding: 0 .4rem;
+/* ---------- Language toggle (header, single cycling button like theme) ---------- */
+.lang-toggle {
+  display: inline-flex; align-items: center; gap: .25rem;
+  height: 30px; padding: 0 .5rem; margin-left: .375rem;
   line-height: 1;
   color: var(--nav-item-color, var(--color-text-primary));
   background: transparent; border: none; border-radius: var(--btn-radius, 8px);
-  cursor: pointer; outline: none; opacity: .55;
-  transition: opacity .15s, background-color .15s, transform .1s;
+  cursor: pointer; outline: none;
+  transition: background-color .15s, transform .1s;
 }
-.lang-flag__emoji { font-size: 1.05rem; }
-.lang-flag__code { font-size: .7rem; font-weight: 700; letter-spacing: .02em; }
-.lang-flag:hover { opacity: .95; background: color-mix(in srgb, var(--nav-item-color, #888) 12%, transparent); }
-.lang-flag.is-active { opacity: 1; background: color-mix(in srgb, var(--color-primary) 16%, transparent); }
-.lang-flag:active { transform: scale(0.92); }
-.lang-flag:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* Larger tap targets on small screens; the 2-letter code keeps it legible even
-   where flag emoji fall back to letters (e.g. Windows). */
+.lang-toggle__emoji { font-size: 1.05rem; }
+.lang-toggle__code { font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
+.lang-toggle:hover { background: color-mix(in srgb, var(--nav-item-color, #888) 12%, transparent); }
+.lang-toggle:active { transform: scale(0.94); }
+.lang-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) {
-  .lang-flag { height: 34px; padding: 0 .5rem; }
-  .lang-flag__emoji { font-size: 1.2rem; }
-  .lang-flag__code { font-size: .78rem; }
+  .lang-toggle { height: 34px; padding: 0 .55rem; }
+  .lang-toggle__emoji { font-size: 1.2rem; }
 }
 
 /* AWS: Cloudscape input — 2px border, blue on focus */

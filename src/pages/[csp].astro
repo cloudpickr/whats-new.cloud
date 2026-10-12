@@ -83,7 +83,7 @@ const structuredData = [
   {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: `${names[csp]} 업데이트 | What's New 새 소식 요약`,
+    name: `${names[csp]} 업데이트 | What's New in Cloud`,
     url: categoryUrl,
     inLanguage: LANGS[lang].bcp47,
     description: `${names[csp]} 공식 업데이트를 한국어로 요약한 최신 릴리스 노트 목록입니다.`,
@@ -95,7 +95,7 @@ const structuredData = [
       {
         '@type': 'ListItem',
         position: 1,
-        name: 'What\'s New 새 소식 요약',
+        name: 'What\'s New in Cloud',
         item: new URL('/', Astro.site).toString(),
       },
       {
@@ -123,11 +123,11 @@ const structuredData = [
 ---
 
 <Layout
-  title={`${names[csp]} ${t.updates} | What's New 새 소식 요약`}
+  title={`${names[csp]} ${t.updates} | What's New in Cloud`}
   description={`${names[csp]} 공식 업데이트를 빠르게 훑어볼 수 있도록 한국어로 정리한 최신 릴리스 노트 목록입니다.`}
   vendor={csp}
   lang={lang}
-  ogImageAlt={`${names[csp]} 공식 업데이트를 요약한 What's New 새 소식 요약 공유 이미지`}
+  ogImageAlt={`${names[csp]} 공식 업데이트를 요약한 What's New in Cloud 공유 이미지`}
   structuredData={structuredData}
 >
   <div class="page-head">

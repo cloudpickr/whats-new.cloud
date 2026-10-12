@@ -1,4 +1,4 @@
-# What's New 한국어 요약
+# What's New in Cloud
 
 > AWS, Google Cloud, Microsoft Azure, Oracle Cloud(OCI)의 공식 "What's New" / 릴리스 노트 피드를 수집해, 각 업데이트를 한국어 카드로 요약해 보여주는 클라우드 릴리스 노트 사이트입니다. 번역·요약은 Workers AI로 생성되며, 원문 링크를 항상 함께 제공합니다.
 
