@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { callBackend } from '../lib/apiClient';
+import { PROVIDER_LIST } from '../lib/providers';
 
 // Edge-cache the rendered HTML at Cloudflare (content refreshes on a 1-min
 // cron): 60s edge copy to cut repeat TTFB, 5-min stale-while-revalidate, and
@@ -10,12 +11,7 @@ Astro.response.headers.set(
   'public, max-age=0, s-maxage=60, stale-while-revalidate=300'
 );
 
-const csps = [
-  { id: 'aws', name: 'Amazon Web Services', color: '#FF9900', accent: '#232F3E', font: "'Amazon Ember', sans-serif" },
-  { id: 'gcp', name: 'Google Cloud', color: 'linear-gradient(to right, #4285F4 25%, #EA4335 25%, #EA4335 50%, #FBBC04 50%, #FBBC04 75%, #34A853 75%)', accent: '#4285F4', isGradient: true, font: "'Google Sans', sans-serif", weight: 700 },
-  { id: 'azure', name: 'Microsoft Azure', color: '#0078D4', accent: '#50E6FF', font: "'Segoe UI Web', 'Segoe UI', sans-serif" },
-  { id: 'oci', name: 'Oracle Cloud', color: '#C74634', accent: '#C74634', font: "'Oracle Sans', -apple-system, 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif", weight: 600 },
-];
+const csps = PROVIDER_LIST;
 
 const data: Record<string, any[]> = {};
 const results = await Promise.all(
@@ -49,7 +45,7 @@ const structuredData = [
     itemListElement: csps.map((c, index) => ({
       '@type': 'ListItem',
       position: index + 1,
-      name: c.name,
+      name: c.homeName || c.name,
       url: new URL(`/${c.id}`, Astro.site).toString(),
     })),
   },
@@ -88,10 +84,10 @@ const structuredData = [
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full animate-pulse" style={`background: ${c.isGradient ? c.accent : c.color};`}></span>
             <h2 class="text-base sm:text-lg font-extrabold tracking-tight" style={`color: var(--color-text-primary); font-family: ${c.font}; font-weight: ${c.weight || 700};`}>
-              {c.name}
+              {c.homeName || c.name}
             </h2>
           </div>
-          <a href={`/${c.id}`} aria-label={`${c.name} 전체 보기`} title={`${c.name} 전체 보기`} class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold transition-colors hover:opacity-80" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
+          <a href={`/${c.id}`} aria-label={`${c.homeName || c.name} 전체 보기`} title={`${c.homeName || c.name} 전체 보기`} class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold transition-colors hover:opacity-80" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
             →
           </a>
         </div>
