@@ -3,6 +3,7 @@ import '../styles/base.css';
 import '../styles/themes.css';
 import '../styles/components.css';
 import { ClientRouter } from 'astro:transitions';
+import { PROVIDER_IDS, PROVIDER_LIST, NAV_LABELS } from '../lib/providers';
 
 interface Props {
   title: string;
@@ -21,17 +22,15 @@ const {
   ogImageAlt = 'What\'s New 한국어 요약 공유 이미지',
   structuredData = [],
 } = Astro.props;
-const cspNames: Record<string, string> = { home: 'Cloud What\'s New', aws: 'AWS', gcp: 'GCP', azure: 'Azure', oci: 'OCI' };
+const cspNames: Record<string, string> = NAV_LABELS;
 const siteName = 'What\'s New 한국어 요약';
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).toString();
 const ogImageUrl = new URL(ogImage, Astro.site).toString();
 const structuredDataItems = Array.isArray(structuredData) ? structuredData : [structuredData];
 // Per-vendor brand font to preload (regular weight only — the LCP text face)
-const fontPreload: Record<string, string> = {
-  aws: '/fonts/amazon-ember-400.woff2',
-  azure: 'https://c.s-microsoft.com/static/fonts/segoe-ui/west-european/Normal/latest.woff2',
-  oci: '/fonts/oracle-sans-600.woff2',
-};
+const fontPreload: Record<string, string> = Object.fromEntries(
+  PROVIDER_LIST.filter((p) => p.fontPreload).map((p) => [p.id, p.fontPreload as string]),
+);
 ---
 
 <!DOCTYPE html>
@@ -207,7 +206,7 @@ const fontPreload: Record<string, string> = {
           ☁️ What's New <span class="hidden sm:inline">한국어 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>
         </a>
         <nav class="flex items-center h-full gap-0.5 sm:gap-1.5 min-w-0">
-          {(['aws', 'gcp', 'azure', 'oci'] as const).map(c => (
+          {PROVIDER_IDS.map(c => (
             <a href={`/${c}`} class={`nav-item${vendor === c ? ' is-active' : ''}`} aria-current={vendor === c ? 'page' : undefined}>
               {cspNames[c]}
             </a>
