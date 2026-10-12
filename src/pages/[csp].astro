@@ -3,15 +3,20 @@ import Layout from '../layouts/Layout.astro';
 import UpdateCard from '../components/UpdateCard.astro';
 import { callBackend } from '../lib/apiClient';
 import { PROVIDERS, isProvider } from '../lib/providers';
+import { resolveLang, LANGS } from '../lib/langs';
 
 const { csp } = Astro.params;
 if (!isProvider(csp)) return Astro.redirect('/');
 const provider = PROVIDERS[csp];
+const lang = resolveLang(Astro.url.searchParams.get('lang'));
 
 // Edge-cache the rendered HTML at Cloudflare. Content refreshes on a 1-min cron,
 // so serve a 60s edge copy (cuts repeat TTFB) and keep serving stale for 5 min
 // while revalidating in the background. Browsers always revalidate (max-age=0)
 // so a user never sees stale beyond the edge window.
+// Vary on the lang query so the edge doesn't serve one language's HTML for
+// another; different ?lang= values are distinct cache keys already (URL-keyed),
+// this just makes the intent explicit for shared caches.
 Astro.response.headers.set(
   'Cache-Control',
   'public, max-age=0, s-maxage=60, stale-while-revalidate=300'
@@ -21,20 +26,37 @@ let articles: any[] = [];
 try {
   // Keep the last 30 days rather than a fixed count, so high-volume CSPs
   // (aws/gcp) still show a full month. limit is a safety ceiling.
-  const res = await callBackend<{ items?: any[] }>(`/api/articles?csp=${csp}&lang=ko&days=30&limit=500`, { items: [] });
+  const res = await callBackend<{ items?: any[] }>(`/api/articles?csp=${csp}&lang=${lang}&days=30&limit=500`, { items: [] });
   articles = res.items || [];
 } catch (e) { console.error(e); }
 
+// Per-language UI strings and status vocabulary. Status values are stored in
+// the target language (worker LANG_PROFILES), so the filter must match the
+// language being shown. Each status maps to a stable class for styling.
+const STATUS_BY_LANG: Record<string, { order: string[]; cls: Record<string, string>; fallback: string }> = {
+  ko: { order: ['정식 출시', '미리보기', '베타', '지원 종료'], cls: { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired' }, fallback: '번역 준비중' },
+  en: { order: ['General Availability', 'Preview', 'Beta', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'Beta': 'beta', 'End of Support': 'retired' }, fallback: 'Pending translation' },
+  ja: { order: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'ベータ': 'beta', 'サポート終了': 'retired' }, fallback: '翻訳準備中' },
+};
+const UI: Record<string, { updates: string; lastUpdated: string; search: string; shareFilter: string; linkCopied: string; feedDesc: (name: string, url: string) => string; empty: string; noResults: string }> = {
+  ko: { updates: '업데이트', lastUpdated: '최종 업데이트', search: '검색...', shareFilter: '현재 필터 링크 복사', linkCopied: '링크가 복사되었습니다', feedDesc: (n, u) => `${n} <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.`, empty: '업데이트가 없습니다.', noResults: '검색 결과가 없습니다.' },
+  en: { updates: 'Updates', lastUpdated: 'Last updated', search: 'Search...', shareFilter: 'Copy link to current filter', linkCopied: 'Link copied', feedDesc: (n, u) => `Machine-translated and quality-filtered from the <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} official feed</a>.`, empty: 'No updates.', noResults: 'No results.' },
+  ja: { updates: 'アップデート', lastUpdated: '最終更新', search: '検索...', shareFilter: '現在のフィルターのリンクをコピー', linkCopied: 'リンクをコピーしました', feedDesc: (n, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} 公式フィード</a>を機械翻訳および品質フィルタリングして提供します。`, empty: 'アップデートはありません。', noResults: '検索結果がありません。' },
+};
+const t = UI[lang];
+const statusMeta = STATUS_BY_LANG[lang];
+const STATUS_ORDER = statusMeta.order;
+const FALLBACK_LABEL = statusMeta.fallback;
+
 const rss = provider.official;
 const names: Record<string, string> = { [csp]: provider.name };
-const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString(LANGS[lang].bcp47, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
-// Status counting
-const STATUS_ORDER = ['정식 출시', '미리보기', '베타', '지원 종료'];
+// Status counting (STATUS_ORDER/FALLBACK_LABEL are lang-aware, defined above)
 const statusCounts: Record<string, number> = {};
 for (const a of articles) {
   if (a.is_fallback) {
-    statusCounts['번역 준비중'] = (statusCounts['번역 준비중'] || 0) + 1;
+    statusCounts[FALLBACK_LABEL] = (statusCounts[FALLBACK_LABEL] || 0) + 1;
   } else {
     try {
       const ss = JSON.parse(a.status || '[]');
@@ -47,15 +69,15 @@ for (const a of articles) {
 }
 
 function getArticleStatuses(a: any): string {
-  if (a.is_fallback) return '번역 준비중';
+  if (a.is_fallback) return FALLBACK_LABEL;
   try {
     const ss = JSON.parse(a.status || '[]');
     return Array.isArray(ss) ? ss.join(',') : '';
   } catch { return ''; }
 }
 
-const filterClass: Record<string, string> = { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired', '번역 준비중': 'fallback' };
-const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts['번역 준비중'] ? ['번역 준비중'] : [])];
+const filterClass: Record<string, string> = { ...statusMeta.cls, [FALLBACK_LABEL]: 'fallback' };
+const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts[FALLBACK_LABEL] ? [FALLBACK_LABEL] : [])];
 const categoryUrl = new URL(`/${csp}`, Astro.site).toString();
 const structuredData = [
   {
@@ -101,9 +123,10 @@ const structuredData = [
 ---
 
 <Layout
-  title={`${names[csp]} 업데이트 | What's New 한국어 요약`}
+  title={`${names[csp]} ${t.updates} | What's New 한국어 요약`}
   description={`${names[csp]} 공식 업데이트를 빠르게 훑어볼 수 있도록 한국어로 정리한 최신 릴리스 노트 목록입니다.`}
   vendor={csp}
+  lang={lang}
   ogImageAlt={`${names[csp]} 공식 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지`}
   structuredData={structuredData}
 >
@@ -111,12 +134,10 @@ const structuredData = [
     <div class="page-head__text">
       <h1 class="page-head__title">
         <span class="page-head__dot" aria-hidden="true"></span>
-        <span class="page-head__title-text">{names[csp]} 업데이트<span class="page-head__counter">({articles.length})</span></span>
+        <span class="page-head__title-text">{names[csp]} {t.updates}<span class="page-head__counter">({articles.length})</span></span>
       </h1>
-      <p class="page-head__desc">
-        {names[csp]} <a href={rss.url} target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.
-      </p>
-      {latest && <span class="page-head__meta">최종 업데이트: {latest}</span>}
+      <p class="page-head__desc" set:html={t.feedDesc(names[csp], rss.url)}></p>
+      {latest && <span class="page-head__meta">{t.lastUpdated}: {latest}</span>}
     </div>
     <div class="page-head__tools">
       {activeStatusFilters.length > 0 && (
@@ -136,9 +157,9 @@ const structuredData = [
         <svg class="search__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
         </svg>
-        <input type="search" id="search" placeholder="검색..." aria-label="업데이트 검색" autocomplete="off" class="search__input" />
+        <input type="search" id="search" placeholder={t.search} aria-label={t.search} autocomplete="off" class="search__input" />
       </div>
-      <button type="button" id="share-filter" class="share-filter-btn" aria-label="현재 필터 링크 복사" title="현재 필터 링크 복사">
+      <button type="button" id="share-filter" class="share-filter-btn" data-copied-label={t.linkCopied} aria-label={t.shareFilter} title={t.shareFilter}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98M18 8a3 3 0 10-3-3 3 3 0 003 3zM6 15a3 3 0 10-3-3 3 3 0 003 3zm12 7a3 3 0 10-3-3 3 3 0 003 3z"></path>
         </svg>
@@ -151,7 +172,7 @@ const structuredData = [
       <div class="card-wrapper" data-statuses={getArticleStatuses(a)}>
         <UpdateCard
           title={a.title} csp={a.csp} index={i}
-          date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
+          date={a.pub_date ? new Date(a.pub_date).toLocaleDateString(LANGS[lang].bcp47, { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
           content={a.summary || ''} target={a.target} features={a.features}
           regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} articleId={a.article_id} />
       </div>
@@ -159,10 +180,10 @@ const structuredData = [
   </div>
 
   {articles.length === 0 && (
-    <p class="text-center py-16 text-sm" style="color: var(--color-text-secondary);">업데이트가 없습니다.</p>
+    <p class="text-center py-16 text-sm" style="color: var(--color-text-secondary);">{t.empty}</p>
   )}
 
-  <p id="no-results" class="hidden text-center py-16 text-sm" style="color: var(--color-text-secondary);">검색 결과가 없습니다.</p>
+  <p id="no-results" class="hidden text-center py-16 text-sm" style="color: var(--color-text-secondary);">{t.noResults}</p>
 
   <script>
     // Bind search and filtering on page load/navigation.
@@ -223,7 +244,8 @@ const structuredData = [
 
       // Share button: serialize the CURRENT filter + search to a URL and copy it.
       const shareBtn = document.getElementById('share-filter');
-      const shareLabel = shareBtn?.getAttribute('aria-label') || '현재 필터 링크 복사';
+      const shareLabel = shareBtn?.getAttribute('aria-label') || '';
+      const copiedLabel = shareBtn?.getAttribute('data-copied-label') || shareLabel;
       let shareResetTimer: ReturnType<typeof setTimeout> | undefined;
       shareBtn?.addEventListener('click', async () => {
         const u = new URL(window.location.href);
@@ -237,7 +259,7 @@ const structuredData = [
         try {
           await navigator.clipboard.writeText(link);
           shareBtn.classList.add('copied');
-          shareBtn.setAttribute('aria-label', '링크가 복사되었습니다');
+          shareBtn.setAttribute('aria-label', copiedLabel);
           clearTimeout(shareResetTimer);
           shareResetTimer = setTimeout(() => {
             shareBtn.classList.remove('copied');
