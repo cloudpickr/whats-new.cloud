@@ -11,6 +11,7 @@
 // (static assets via the ASSETS binding + on-demand rendered routes).
 import { handle } from '@astrojs/cloudflare/handler';
 import backend from '../worker/index.js';
+import { langFromAcceptLanguage } from './lib/langs';
 
 // Paths owned by the backend API. Anything else is an Astro route.
 const API_PREFIXES = ['/api/', '/mcp'];
@@ -51,8 +52,16 @@ async function withEdgeCache(
     return render();
   }
   const cache = (caches as unknown as { default: Cache }).default;
-  // Normalize the cache key to the URL only (drop the request's own headers).
-  const cacheKey = new Request(new URL(request.url).toString(), { method: 'GET' });
+  // Cache key = URL + the resolved UI language. For cookieless requests the
+  // page language now comes from Accept-Language (see resolveActiveLang), so
+  // keying on URL alone would let one visitor's language (e.g. ja) be served
+  // to another's browser (e.g. en). Fold the normalized language (ko/en/ja)
+  // into a cache-key-only query param so each language keeps its own edge
+  // entry. The real origin request/URL is unchanged.
+  const lang = langFromAcceptLanguage(request.headers.get('accept-language')) ?? 'ko';
+  const keyUrl = new URL(request.url);
+  keyUrl.searchParams.set('__lang', lang);
+  const cacheKey = new Request(keyUrl.toString(), { method: 'GET' });
 
   const cached = await cache.match(cacheKey);
   if (cached) {

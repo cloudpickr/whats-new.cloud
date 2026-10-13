@@ -14,3 +14,8 @@ worker-configuration.d.ts
 
 # semantic_reviewer agent output — local review notes, not tracked
 docs/reviews/
+
+# Cloudflare skills (npx skills add) — local agent tooling, not app code
+.agents/
+skills-lock.json
+.claude/
