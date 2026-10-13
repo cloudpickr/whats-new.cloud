@@ -2269,25 +2269,25 @@ export default {
           format: { type: 'string', enum: ['summary', 'source'], description: 'summary (default): localized AI summary (aws/gcp/azure/oci). source: vendor-original English text from ingestion (all CSPs incl. openai/ibm); requires Authorization: Bearer <mcp token>.' },
         };
         const searchDesc = isAuthenticated
-          ? 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko) and English (en) AI summaries; openai/ibm are vendor-original English only, reachable with format="source".'
-          : 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko) and English (en) AI summaries.';
+          ? 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko), English (en), and Japanese (ja) AI summaries; openai/ibm are vendor-original English only, reachable with format="source".'
+          : 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko), English (en), and Japanese (ja) AI summaries.';
         const getReleaseDesc = isAuthenticated
-          ? 'Get a specific release note by article ID. format="source" returns vendor-original English for any CSP (incl. openai/ibm); format="summary" returns a localized AI summary (aws/gcp/azure/oci).'
-          : 'Get a specific release note by article ID, as a localized AI summary (aws/gcp/azure/oci).';
+          ? 'Get a specific release note by article ID. format="source" returns vendor-original English for any CSP (incl. openai/ibm); format="summary" returns a localized AI summary (aws/gcp/azure/oci) in ko/en/ja.'
+          : 'Get a specific release note by article ID, as a localized AI summary (aws/gcp/azure/oci) in ko/en/ja.';
         const searchCspEnum = isAuthenticated ? ['aws', 'gcp', 'azure', 'oci', 'openai', 'ibm'] : ['aws', 'gcp', 'azure', 'oci'];
         const searchCspDesc = isAuthenticated
-          ? 'Cloud provider filter (lowercase). aws/gcp/azure/oci support ko/en summaries and format="source"; openai/ibm are source-only (format="source", vendor-original English, no translation).'
+          ? 'Cloud provider filter (lowercase). aws/gcp/azure/oci support ko/en/ja summaries and format="source"; openai/ibm are source-only (format="source", vendor-original English, no translation).'
           : 'Cloud provider filter (lowercase): aws, gcp, azure, or oci.';
         const langDesc = isAuthenticated
-          ? 'Output language for format="summary": ko (default) or en, when available. Ignored for format="source" (always vendor-original English).'
-          : 'Output language: ko (default) or en, when available.';
+          ? 'Output language for format="summary": ko (default), en, or ja. Ignored for format="source" (always vendor-original English).'
+          : 'Output language: ko (default), en, or ja.';
 
         const tools = [
           { name: 'search_releases', description: searchDesc, inputSchema: {
             type: 'object', properties: {
               query: { type: 'string', description: 'Search keyword — matches title and summary' },
               csp: { type: 'string', enum: searchCspEnum, description: searchCspDesc },
-              lang: { type: 'string', enum: ['ko', 'en'], description: langDesc },
+              lang: { type: 'string', enum: ['ko', 'en', 'ja'], description: langDesc },
               ...(isAuthenticated ? sourceFormatProp : {}),
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
@@ -2298,7 +2298,7 @@ export default {
           { name: 'get_release', description: getReleaseDesc, inputSchema: {
             type: 'object', properties: {
               id: { type: 'number', description: 'Article ID' },
-              lang: { type: 'string', description: isAuthenticated ? 'Language for format="summary" (default "ko"). Ignored for format="source".' : 'Language for the summary (default "ko").' },
+              lang: { type: 'string', enum: ['ko', 'en', 'ja'], description: isAuthenticated ? 'Language for format="summary": ko (default), en, or ja. Ignored for format="source".' : 'Summary language: ko (default), en, or ja.' },
               ...(isAuthenticated ? sourceFormatProp : {}),
             }, required: ['id'],
           }},
@@ -2371,14 +2371,17 @@ export default {
             params = [...dateParams];
             tbl = 'lc';
             searchCol = { title: 'lc.title', text: 'lc.summary' };
-          } else if (lang === 'ko') {
-            // Korean — direct, no JOIN needed
-            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
-            params = [...dateParams];
+          } else if (lang === 'ko' || lang === 'ja') {
+            // ko / ja — direct lookup, no JOIN/fallback needed: both are fully
+            // generated by the pipeline (see LANG_PROFILES + the ['ko','en','ja']
+            // backlog/review sweeps), so each has its own localized_content row.
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ? AND ${dateFilter}`;
+            params = [lang, ...dateParams];
             tbl = 'lc';
             searchCol = { title: 'lc.title', text: 'lc.summary' };
           } else {
-            // ja, zh... — requested lang with ko fallback + original title/URL
+            // Any other lang (e.g. zh) is not generated — fall back to the ko
+            // row, overlaying the requested lang if a row happens to exist.
             sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.title_en as original_title, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
             params = [lang, ...dateParams];
             tbl = 'ko';
