@@ -38,10 +38,10 @@ const STATUS_BY_LANG: Record<string, { order: string[]; cls: Record<string, stri
   en: { order: ['General Availability', 'Preview', 'Beta', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'Beta': 'beta', 'End of Support': 'retired' }, fallback: 'Pending translation' },
   ja: { order: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'ベータ': 'beta', 'サポート終了': 'retired' }, fallback: '翻訳準備中' },
 };
-const UI: Record<string, { updates: string; lastUpdated: string; search: string; shareFilter: string; linkCopied: string; feedDesc: (name: string, url: string) => string; empty: string; noResults: string }> = {
-  ko: { updates: '업데이트', lastUpdated: '최종 업데이트', search: '검색...', shareFilter: '현재 필터 링크 복사', linkCopied: '링크가 복사되었습니다', feedDesc: (n, u) => `${n} <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.`, empty: '업데이트가 없습니다.', noResults: '검색 결과가 없습니다.' },
-  en: { updates: 'Updates', lastUpdated: 'Last updated', search: 'Search...', shareFilter: 'Copy link to current filter', linkCopied: 'Link copied', feedDesc: (n, u) => `Machine-translated and quality-filtered from the <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} official feed</a>.`, empty: 'No updates.', noResults: 'No results.' },
-  ja: { updates: 'アップデート', lastUpdated: '最終更新', search: '検索...', shareFilter: '現在のフィルターのリンクをコピー', linkCopied: 'リンクをコピーしました', feedDesc: (n, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} 公式フィード</a>を機械翻訳および品質フィルタリングして提供します。`, empty: 'アップデートはありません。', noResults: '検索結果がありません。' },
+const UI: Record<string, { updates: string; lastUpdated: string; search: string; shareFilter: string; linkCopied: string; openLabel: string; feedDesc: (name: string, url: string) => string; empty: string; noResults: string }> = {
+  ko: { updates: '업데이트', lastUpdated: '최종 업데이트', search: '검색...', shareFilter: '현재 필터 링크 복사', linkCopied: '링크가 복사되었습니다', openLabel: '원문 보기', feedDesc: (n, u) => `${n} <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.`, empty: '업데이트가 없습니다.', noResults: '검색 결과가 없습니다.' },
+  en: { updates: 'Updates', lastUpdated: 'Last updated', search: 'Search...', shareFilter: 'Copy link to current filter', linkCopied: 'Link copied', openLabel: 'View original', feedDesc: (n, u) => `Machine-translated and quality-filtered from the <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} official feed</a>.`, empty: 'No updates.', noResults: 'No results.' },
+  ja: { updates: 'アップデート', lastUpdated: '最終更新', search: '検索...', shareFilter: '現在のフィルターのリンクをコピー', linkCopied: 'リンクをコピーしました', openLabel: '原文を見る', feedDesc: (n, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">${n} 公式フィード</a>を機械翻訳および品質フィルタリングして提供します。`, empty: 'アップデートはありません。', noResults: '検索結果がありません。' },
 };
 const t = UI[lang];
 const statusMeta = STATUS_BY_LANG[lang];
@@ -174,7 +174,7 @@ const structuredData = [
           title={a.title} csp={a.csp} index={i}
           date={a.pub_date ? new Date(a.pub_date).toLocaleDateString(LANGS[lang].bcp47, { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
           content={a.summary || ''} target={a.target} features={a.features}
-          regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} articleId={a.article_id} />
+          regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} articleId={a.article_id} openLabel={t.openLabel} />
       </div>
     ))}
   </div>
@@ -280,13 +280,18 @@ const structuredData = [
     let activeCard: HTMLElement | null = null;
 
     function expandTarget() {
-      const hash = window.location.hash;
-      if (!hash) return;
+      const rawHash = window.location.hash;
+      if (!rawHash) return;
+      // IDs are now the bare numeric article id (#5370584). Old shared links
+      // used #article-5370584 — strip the legacy prefix for back-compat.
+      const id = rawHash.slice(1).replace(/^article-/, '');
+      if (!id) return;
 
       // Deactivate previous
       if (activeCard) activeCard.classList.remove('card-active');
 
-      const card = document.querySelector<HTMLElement>(hash);
+      // getElementById (not querySelector) so a numeric id is a valid lookup.
+      const card = document.getElementById(id);
       if (!card) return;
       activeCard = card;
 
