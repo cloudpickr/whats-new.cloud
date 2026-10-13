@@ -80,9 +80,18 @@ const rows = [
     const existingMenu = document.getElementById('card-ctx-menu');
     if (existingMenu) existingMenu.remove();
 
+    // Localize the menu by the document language (set by Layout: ko-KR/en-US/ja-JP).
+    const langCode = (document.documentElement.lang || 'ko').slice(0, 2);
+    const CTX_I18N: Record<string, { link: string; id: string; permalink: string; idLabel: string; copied: (l: string) => string; failed: string }> = {
+      ko: { link: '🔗 퍼머링크 복사', id: '📋 ID 복사', permalink: '퍼머링크', idLabel: 'ID', copied: (l) => `${l} 복사됨`, failed: '복사 실패' },
+      en: { link: '🔗 Copy permalink', id: '📋 Copy ID', permalink: 'Permalink', idLabel: 'ID', copied: (l) => `${l} copied`, failed: 'Copy failed' },
+      ja: { link: '🔗 パーマリンクをコピー', id: '📋 IDをコピー', permalink: 'パーマリンク', idLabel: 'ID', copied: (l) => `${l}をコピーしました`, failed: 'コピーに失敗しました' },
+    };
+    const ctxT = CTX_I18N[langCode] || CTX_I18N.ko;
+
     const ctxMenu = document.createElement('div');
     ctxMenu.id = 'card-ctx-menu';
-    ctxMenu.innerHTML = '<button id="ctx-copy-link">🔗 퍼머링크 복사</button><button id="ctx-copy-id">📋 ID 복사</button>';
+    ctxMenu.innerHTML = `<button id="ctx-copy-link">${ctxT.link}</button><button id="ctx-copy-id">${ctxT.id}</button>`;
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:140px;';
     ctxMenu.querySelectorAll('button').forEach(b => b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--color-text-primary);border-radius:4px;');
     ctxMenu.querySelectorAll('button').forEach(b => { b.onmouseenter = () => b.style.background = 'var(--color-border)'; b.onmouseleave = () => b.style.background = 'none'; });
@@ -111,13 +120,13 @@ const rows = [
     }
 
     async function copyText(text: string, label: string) {
-      try { await navigator.clipboard.writeText(text); showToast(`${label} 복사됨`); }
-      catch { showToast('복사 실패'); }
+      try { await navigator.clipboard.writeText(text); showToast(ctxT.copied(label)); }
+      catch { showToast(ctxT.failed); }
       hideCtxMenu();
     }
 
-    document.getElementById('ctx-copy-link')!.onclick = () => ctxTarget && copyText(ctxTarget.permalink, '퍼머링크');
-    document.getElementById('ctx-copy-id')!.onclick = () => ctxTarget && copyText(ctxTarget.id, 'ID');
+    document.getElementById('ctx-copy-link')!.onclick = () => ctxTarget && copyText(ctxTarget.permalink, ctxT.permalink);
+    document.getElementById('ctx-copy-id')!.onclick = () => ctxTarget && copyText(ctxTarget.id, ctxT.idLabel);
     document.onclick = (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); };
 
     function getCardInfo(card: HTMLElement) {
