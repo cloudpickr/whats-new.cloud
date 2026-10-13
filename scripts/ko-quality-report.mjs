@@ -6,6 +6,9 @@
 const LIMIT = Number(process.argv[2] || 80);
 // API base follows SITE_URL (api.<host>) so one variable moves everything;
 // API_BASE still overrides directly if needed.
+// NOTE: fallback stays whats-new.kr (not .cloud) — it derives the API host as
+// api.<host>, and the API custom domain is still api.whats-new.kr (the public
+// site moved to .cloud, the API host did not). Override via SITE_URL/API_BASE.
 const SITE_URL = process.env.SITE_URL || 'https://whats-new.kr';
 const API = process.env.API_BASE || `https://api.${new URL(SITE_URL).host}`;
 

@@ -4,9 +4,16 @@ interface Props {
   target?: string; features?: string; regions?: string; status?: string;
   originalLink?: string; index?: number; articleId?: number; isFallback?: boolean;
   openLabel?: string;
+  fallbackLabel?: string;
+  kvLabels?: { target: string; features: string; regions: string };
 }
 
-const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, articleId, isFallback = false, openLabel = '원문 보기' } = Astro.props;
+const {
+  title, date, content, csp, target, features, regions, status, originalLink,
+  index = 0, articleId, isFallback = false, openLabel = '원문 보기',
+  fallbackLabel = '번역 준비중',
+  kvLabels = { target: '대상', features: '기능', regions: '리전' },
+} = Astro.props;
 
 let statuses: string[] = [];
 try {
@@ -30,9 +37,9 @@ const cardStyle = csp === 'gcp' ? `--gcp-accent:${gcpColors[index % 4]};` : unde
 
 const hasDetails = !!(target || features || regions);
 const rows = [
-  { key: 'target', label: '대상', value: target, icon: '<circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>' },
-  { key: 'features', label: '기능', value: features, icon: '<path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/>' },
-  { key: 'regions', label: '리전', value: regions, icon: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/>' },
+  { key: 'target', label: kvLabels.target, value: target, icon: '<circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>' },
+  { key: 'features', label: kvLabels.features, value: features, icon: '<path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/>' },
+  { key: 'regions', label: kvLabels.regions, value: regions, icon: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/>' },
 ].filter(r => r.value);
 ---
 
@@ -44,7 +51,7 @@ const rows = [
   <div class="update-card__inner">
     <div>
       <div class="update-card__meta">
-        {isFallback && <span class="badge badge--fallback">번역 준비중</span>}
+        {isFallback && <span class="badge badge--fallback">{fallbackLabel}</span>}
         {statuses.map(s => <span class={`badge ${statusClass[s] || 'badge--other'}`}>{s}</span>)}
         {date && <time class="update-card__date">{date}</time>}
       </div>

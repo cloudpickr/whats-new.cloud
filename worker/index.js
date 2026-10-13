@@ -3,7 +3,7 @@
 // repo variable at build time); this literal is only the safety fallback when
 // that variable is unset (e.g. a bare local run). Change the service variable,
 // not this constant, to point the site at a new domain.
-const DEFAULT_SITE_URL = 'https://whats-new.kr';
+const DEFAULT_SITE_URL = 'https://whats-new.cloud';
 
 const RSS_FEEDS = {
   aws: 'https://aws.amazon.com/about-aws/whats-new/recent/feed/',

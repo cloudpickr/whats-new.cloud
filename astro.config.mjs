@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 // SITE_URL build-time variable (GitHub Actions repo variable); the literal is
 // only the fallback for bare local builds. Point the service variable at a new
 // domain to move the site — don't edit this file.
-const SITE_URL = process.env.SITE_URL || 'https://whats-new.kr';
+const SITE_URL = process.env.SITE_URL || 'https://whats-new.cloud';
 
 export default defineConfig({
   site: SITE_URL,

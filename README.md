@@ -2,7 +2,7 @@
 
 Amazon Web Services · Google Cloud · Microsoft Azure · Oracle Cloud 클라우드 최신 업데이트를 한국어로 요약합니다.
 
-**Live**: https://whats-new.kr
+**Live**: https://whats-new.cloud
 
 ## 아키텍처
 
@@ -54,7 +54,7 @@ Cloudflare Pages (Astro SSR)
 | 엔드포인트 | 설명 |
 |-----------|------|
 | `POST /mcp` | MCP JSON-RPC 2.0 엔드포인트 (기본 요약 조회는 공개, 영문 원문 조회는 에이전트 인증 필요) |
-| `GET /api/articles` | 기사 조회 — whats-new.kr SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
+| `GET /api/articles` | 기사 조회 — whats-new.cloud SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
 | `GET /api/stats` | 번역/검수/큐 상태 모니터링 (`models` 필드에 현재 가동 중인 번역/검수 모델 ID 포함) |
 | `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 (관리자 전용) |
 | `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리, 관리자 전용) |
@@ -88,7 +88,7 @@ API 접근은 보안 및 용도에 따라 4개 계층으로 구분됩니다.
    - 요청 헤더에 `Authorization: Bearer <token>` (`mcp` 타입 토큰)이 필요하며, 토큰이 없거나 유효하지 않으면 JSON-RPC 에러 `-32001`을 반환합니다.
    - 번역/검수 파이프라인과 독립적이므로 RSS 수집 직후 바로 확인할 수 있습니다.
 3. **사이트 SSR 전용**: `GET /api/articles`
-   - whats-new.kr 웹 프론트엔드의 서버사이드 렌더링(Astro SSR) 전용 엔드포인트입니다 (`site` 타입 토큰 필요).
+   - whats-new.cloud 웹 프론트엔드의 서버사이드 렌더링(Astro SSR) 전용 엔드포인트입니다 (`site` 타입 토큰 필요).
    - 일반 프로그램이나 AI 에이전트는 본 엔드포인트 대신 `POST /mcp`를 사용해야 합니다.
    - `SITE_API_ENFORCEMENT`가 `on`이면 유효한 `site` 토큰이 없는 요청은 401로 거부합니다. 값이 없거나 `off`/`warn`/`on`이 아니면 기본값은 `on`입니다. 명시적인 `warn`은 로그만 남기고 통과시키고, `off`는 이 관문을 끕니다.
 4. **관리자 전용**: `POST /api/pipeline?action=...`
