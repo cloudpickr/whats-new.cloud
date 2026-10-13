@@ -311,13 +311,23 @@ const fontPreload: Record<string, string> = Object.fromEntries(
         function go(next: string) {
           if (!order.includes(next)) return;
           // Persist in a cookie (1 year) so SSR renders this language on bare
-          // URLs without ?lang. SameSite=Lax is fine (same-site navigations).
+          // URLs without ?lang.
           document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax; Secure`;
-          // Navigate to the CLEAN path (drop any ?lang) — the cookie carries the
-          // choice, so the URL doesn't need the param.
+          // Full reload so the server re-renders with the new cookie. We drop
+          // any ?lang so the URL stays clean. If the destination path is the
+          // SAME as the current one (the common case — e.g. picking a language
+          // on /aws with no query), location.assign to an identical URL can be
+          // a no-op under the View Transitions router, which is why it used to
+          // take two clicks. location.reload() guarantees a fresh server hit.
           const u = new URL(window.location.href);
           u.searchParams.delete('lang');
-          window.location.assign(u.pathname + u.search + u.hash);
+          const dest = u.pathname + u.search;
+          const current = window.location.pathname + window.location.search;
+          if (dest === current) {
+            window.location.reload();
+          } else {
+            window.location.assign(dest + u.hash);
+          }
         }
 
         toggle.addEventListener('click', (e) => {
