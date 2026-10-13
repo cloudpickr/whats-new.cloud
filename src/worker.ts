@@ -90,6 +90,14 @@ export default {
 
     const { pathname } = new URL(safeRequest.url);
     if (isApiRequest(pathname)) {
+      // The MCP endpoint is JSON-RPC over POST. A human hitting /mcp in a
+      // browser sends GET — route that to Astro so it renders the localized
+      // MCP info page (src/pages/mcp.astro) with the site's theme/i18n, while
+      // every MCP/JSON-RPC method stays on the backend handler. HEAD follows
+      // GET so link previews/health checks also hit the page, not a 404.
+      if (pathname === '/mcp' && (safeRequest.method === 'GET' || safeRequest.method === 'HEAD')) {
+        return withEdgeCache(safeRequest, ctx, () => handle(safeRequest, env as never, ctx));
+      }
       return backend.fetch(safeRequest, env, ctx);
     }
     return withEdgeCache(safeRequest, ctx, () => handle(safeRequest, env as never, ctx));
