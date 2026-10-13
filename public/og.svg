@@ -16,7 +16,7 @@
   <circle cx="1034" cy="520" r="208" fill="#10B981" fill-opacity="0.1"/>
 
   <rect x="88" y="86" width="280" height="44" rx="22" fill="#E2E8F0" fill-opacity="0.14"/>
-  <text x="108" y="115" fill="#E5EEF9" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="22" font-weight="700">What's New 한국어 요약</text>
+  <text x="108" y="115" fill="#E5EEF9" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="22" font-weight="700">What's New in Cloud</text>
 
   <text x="88" y="202" fill="#F8FAFC" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="68" font-weight="800">클라우드 최신 업데이트</text>
   <text x="88" y="278" fill="#93C5FD" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="52" font-weight="700">한국어 요약</text>
@@ -27,7 +27,7 @@
   <rect x="364" y="424" width="124" height="14" rx="7" fill="#0078D4"/>
 
   <text x="88" y="512" fill="#F8FAFC" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="40" font-weight="700">AWS · GCP · Azure</text>
-  <text x="88" y="558" fill="#94A3B8" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="26" font-weight="500">whats-new.kr</text>
+  <text x="88" y="558" fill="#94A3B8" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="26" font-weight="500">whats-new.cloud</text>
 
   <circle cx="955" cy="142" r="26" fill="#FF9900"/>
   <circle cx="1013" cy="112" r="22" fill="#4285F4"/>

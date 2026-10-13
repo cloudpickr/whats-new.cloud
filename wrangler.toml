@@ -75,7 +75,11 @@ routes = [
 # value denies every admin IP.
 [vars]
 ALERT_WEBHOOK_URL = ""
-SITE_URL = "https://whats-new.kr"
+# Public origin / canonical base. Switched to whats-new.cloud for the domain
+# migration (whats-new.kr now 301s to .cloud via a Cloudflare Redirect Rule).
+# The deploy workflow overrides this from the SITE_URL repo variable at build
+# time; this literal is the fallback.
+SITE_URL = "https://whats-new.cloud"
 BACKLOG_QUEUE_BATCH_SIZE = "25"
 AUTH_ENFORCEMENT = "on"
 SITE_API_ENFORCEMENT = "on"
