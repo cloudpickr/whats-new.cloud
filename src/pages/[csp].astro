@@ -8,7 +8,7 @@ import { resolveActiveLang, LANGS } from '../lib/langs';
 const { csp } = Astro.params;
 if (!isProvider(csp)) return Astro.redirect('/');
 const provider = PROVIDERS[csp];
-const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'));
+const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'), Astro.request.headers.get('accept-language'));
 
 // Edge-cache the rendered HTML at Cloudflare. Content refreshes on a 1-min cron,
 // so serve a 60s edge copy (cuts repeat TTFB) and keep serving stale for 5 min

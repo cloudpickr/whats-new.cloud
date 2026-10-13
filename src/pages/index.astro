@@ -4,7 +4,7 @@ import { callBackend } from '../lib/apiClient';
 import { PROVIDER_LIST } from '../lib/providers';
 import { resolveActiveLang, LANGS } from '../lib/langs';
 
-const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'));
+const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'), Astro.request.headers.get('accept-language'));
 
 // Edge-cache the rendered HTML at Cloudflare (content refreshes on a 1-min
 // cron): 60s edge copy to cut repeat TTFB, 5-min stale-while-revalidate, and

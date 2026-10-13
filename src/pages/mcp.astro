@@ -6,7 +6,7 @@ import { resolveActiveLang, LANGS } from '../lib/langs';
 // POST /mcp, which src/worker.ts routes to the backend handler; only GET/HEAD
 // reaches Astro (see worker.ts). So a developer opening the endpoint in a
 // browser gets localized guidance, while agents keep getting MCP responses.
-const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'));
+const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'), Astro.request.headers.get('accept-language'));
 
 Astro.response.headers.set(
   'Cache-Control',

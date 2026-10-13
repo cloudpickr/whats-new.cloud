@@ -47,15 +47,46 @@ export function langFromCookie(cookieHeader: string | null | undefined): Lang['i
 }
 
 /**
+ * Pick a supported UI language from an Accept-Language header, honoring the
+ * client's quality (q) ordering. Returns null if none of ko/en/ja is requested.
+ * e.g. "ja,en-US;q=0.9,en;q=0.8" → 'ja'; "fr-FR,fr;q=0.9" → null.
+ */
+export function langFromAcceptLanguage(header: string | null | undefined): Lang['id'] | null {
+  if (!header) return null;
+  const ranked = header
+    .split(',')
+    .map((part) => {
+      const [tag, ...params] = part.trim().split(';');
+      const qParam = params.find((p) => p.trim().startsWith('q='));
+      const q = qParam ? parseFloat(qParam.trim().slice(2)) : 1;
+      return { base: tag.trim().toLowerCase().split('-')[0], q: Number.isFinite(q) ? q : 0 };
+    })
+    .filter((e) => e.base === 'ko' || e.base === 'en' || e.base === 'ja')
+    .sort((a, b) => b.q - a.q);
+  return ranked.length ? (ranked[0].base as Lang['id']) : null;
+}
+
+/**
  * Resolve the active language for SSR, with the intended precedence:
  *   explicit ?lang= query  >  saved `lang` cookie  >  ko default.
  * This lets a bare URL (/aws) render the user's saved language from the cookie
  * without putting ?lang= in the URL, while a shared ?lang= link still wins.
  */
-export function resolveActiveLang(searchParams: URLSearchParams, cookieHeader: string | null | undefined): Lang['id'] {
+/**
+ * Resolve the active language for SSR, with the intended precedence:
+ *   explicit ?lang= query  >  saved `lang` cookie  >  Accept-Language  >  ko.
+ * A bare URL (/aws) with no cookie renders in the visitor's browser language
+ * when it's one we support, otherwise ko. An explicit choice (query/cookie)
+ * always wins over the browser header.
+ */
+export function resolveActiveLang(
+  searchParams: URLSearchParams,
+  cookieHeader: string | null | undefined,
+  acceptLanguage?: string | null,
+): Lang['id'] {
   const q = searchParams.get('lang');
   if (q === 'en' || q === 'ja' || q === 'ko') return resolveLang(q);
-  return langFromCookie(cookieHeader) ?? DEFAULT_LANG;
+  return langFromCookie(cookieHeader) ?? langFromAcceptLanguage(acceptLanguage) ?? DEFAULT_LANG;
 }
 
 /**
