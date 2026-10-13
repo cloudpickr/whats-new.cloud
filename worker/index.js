@@ -2170,6 +2170,17 @@ export default {
     }
 
     if (path === '/api/stats') {
+      // Internal operational metrics (backlog, queue, stale jobs, and the live
+      // translation/review MODEL IDs). Not consumed by the public site, so
+      // gate it behind a valid token like MCP get_stats — anonymous callers
+      // must not read pipeline internals or model identities.
+      const statsAuth = authenticateRequest(request, env);
+      if (!statsAuth.ok) {
+        logAuthResult(request, path, statsAuth, 'on');
+        const status = statsAuth.reason === 'missing_key_ring' ? 503 : 401;
+        const message = statsAuth.reason === 'missing_key_ring' ? 'API_KEY_RING is not configured' : 'Unauthorized';
+        return jsonResponse({ error: message }, { status }, headers);
+      }
       const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
@@ -2249,28 +2260,55 @@ export default {
       }
 
       if (rpc.method === 'tools/list') {
-        return respond(rpc.id, { tools: [
-          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko) and English (en) AI summaries; openai/ibm are vendor-original English only, reachable with format="source".', inputSchema: {
+        // Expose internal-only capabilities ONLY to authenticated callers so
+        // the public tool list never advertises something anonymous callers
+        // can't use. For anonymous callers: hide the `format` param (source is
+        // token-gated) and omit get_stats entirely (pipeline status is
+        // internal). Authenticated callers (valid mcp token) see the full set.
+        const sourceFormatProp = {
+          format: { type: 'string', enum: ['summary', 'source'], description: 'summary (default): localized AI summary (aws/gcp/azure/oci). source: vendor-original English text from ingestion (all CSPs incl. openai/ibm); requires Authorization: Bearer <mcp token>.' },
+        };
+        const searchDesc = isAuthenticated
+          ? 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko) and English (en) AI summaries; openai/ibm are vendor-original English only, reachable with format="source".'
+          : 'Search cloud release notes by keyword, CSP, or date range. aws/gcp/azure/oci have Korean (ko) and English (en) AI summaries.';
+        const getReleaseDesc = isAuthenticated
+          ? 'Get a specific release note by article ID. format="source" returns vendor-original English for any CSP (incl. openai/ibm); format="summary" returns a localized AI summary (aws/gcp/azure/oci).'
+          : 'Get a specific release note by article ID, as a localized AI summary (aws/gcp/azure/oci).';
+        const searchCspEnum = isAuthenticated ? ['aws', 'gcp', 'azure', 'oci', 'openai', 'ibm'] : ['aws', 'gcp', 'azure', 'oci'];
+        const searchCspDesc = isAuthenticated
+          ? 'Cloud provider filter (lowercase). aws/gcp/azure/oci support ko/en summaries and format="source"; openai/ibm are source-only (format="source", vendor-original English, no translation).'
+          : 'Cloud provider filter (lowercase): aws, gcp, azure, or oci.';
+        const langDesc = isAuthenticated
+          ? 'Output language for format="summary": ko (default) or en, when available. Ignored for format="source" (always vendor-original English).'
+          : 'Output language: ko (default) or en, when available.';
+
+        const tools = [
+          { name: 'search_releases', description: searchDesc, inputSchema: {
             type: 'object', properties: {
               query: { type: 'string', description: 'Search keyword — matches title and summary' },
-              csp: { type: 'string', enum: ['aws', 'gcp', 'azure', 'oci', 'openai', 'ibm'], description: 'Cloud provider filter (lowercase). aws/gcp/azure/oci support ko/en summaries and format="source"; openai/ibm are source-only (format="source", vendor-original English, no translation).' },
-              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language for format="summary": ko (default) or en, when available. Ignored for format="source" (always vendor-original English).' },
-              format: { type: 'string', enum: ['summary', 'source'], description: 'summary (default): localized AI summary (aws/gcp/azure/oci). source: vendor-original English text from ingestion (all CSPs incl. openai/ibm); requires Authorization: Bearer <mcp token>.' },
+              csp: { type: 'string', enum: searchCspEnum, description: searchCspDesc },
+              lang: { type: 'string', enum: ['ko', 'en'], description: langDesc },
+              ...(isAuthenticated ? sourceFormatProp : {}),
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
               limit: { type: 'number', description: 'Max results (default: 50, or 10/day for date ranges, max 100)' },
             },
           }},
-          { name: 'get_release', description: 'Get a specific release note by article ID. format="source" returns vendor-original English for any CSP (incl. openai/ibm); format="summary" returns a localized AI summary (aws/gcp/azure/oci).', inputSchema: {
+          { name: 'get_release', description: getReleaseDesc, inputSchema: {
             type: 'object', properties: {
               id: { type: 'number', description: 'Article ID' },
-              lang: { type: 'string', description: 'Language for format="summary" (default "ko"). Ignored for format="source".' },
-              format: { type: 'string', enum: ['summary', 'source'], description: 'summary (default): localized AI summary (aws/gcp/azure/oci). source: vendor-original English text (all CSPs incl. openai/ibm); requires Authorization: Bearer <mcp token>.' },
+              lang: { type: 'string', description: isAuthenticated ? 'Language for format="summary" (default "ko"). Ignored for format="source".' : 'Language for the summary (default "ko").' },
+              ...(isAuthenticated ? sourceFormatProp : {}),
             }, required: ['id'],
           }},
-          { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
-        ]});
+        ];
+        // get_stats returns internal translation/review pipeline status — only
+        // list it for authenticated callers (its handler also enforces auth).
+        if (isAuthenticated) {
+          tools.push({ name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} } });
+        }
+        return respond(rpc.id, { tools });
       }
 
       if (rpc.method === 'tools/call') {
@@ -2401,6 +2439,10 @@ export default {
         }
 
         if (name === 'get_stats') {
+          // Internal pipeline status — token-gated, same as format="source".
+          if (!authContext.ok) {
+            return error(rpc.id, -32001, 'get_stats requires Authorization: Bearer <token>.');
+          }
           const [backlog, reviewed, queue] = await Promise.all([
             env.DB.prepare(`SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
             env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),

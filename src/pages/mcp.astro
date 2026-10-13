@@ -16,11 +16,11 @@ Astro.response.headers.set(
 const MCP_ENDPOINT = new URL('/mcp', Astro.site).toString();
 
 // Tool metadata mirrors worker/index.js tools/list (keep names in sync).
-// `format`/source params are internal-only and intentionally omitted here.
+// Only the user-facing tools are listed. `format`/source params and the
+// get_stats pipeline tool are internal-only and intentionally omitted here.
 const TOOLS = [
   { name: 'search_releases', params: 'query · csp · lang · days · start_date · end_date · limit' },
   { name: 'get_release', params: 'id · lang' },
-  { name: 'get_stats', params: '—' },
 ] as const;
 
 type Strings = {
@@ -65,7 +65,6 @@ const UI: Record<string, Strings> = {
     toolDesc: {
       search_releases: '키워드·공급자(CSP)·기간으로 릴리스 노트를 검색합니다. aws/gcp/azure/oci는 한국어·영어 AI 요약을 제공합니다.',
       get_release: '기사 ID로 특정 릴리스 노트를 가져옵니다.',
-      get_stats: '현재 번역·검수 파이프라인 상태를 조회합니다.',
     },
     setupHeading: 'MCP 클라이언트 설정',
     setupIntro: '사용하는 MCP 클라이언트(예: Claude Desktop, Cursor 등)의 설정에 아래 엔드포인트를 추가하세요.',
