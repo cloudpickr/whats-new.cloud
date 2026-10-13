@@ -13,8 +13,15 @@ try {
   if (status) { const p = JSON.parse(status); statuses = Array.isArray(p) ? p.filter((s: string) => !s.includes(':')) : [status]; }
 } catch { statuses = status ? [status] : []; }
 
+// Map every language's status vocabulary to the stable badge class, so cards
+// render colored badges in ko/en/ja (status strings are stored per-language).
 const statusClass: Record<string, string> = {
+  // ko
   '정식 출시': 'badge--ga', '미리보기': 'badge--preview', '베타': 'badge--beta', '지원 종료': 'badge--retired',
+  // en
+  'General Availability': 'badge--ga', 'Preview': 'badge--preview', 'Beta': 'badge--beta', 'End of Support': 'badge--retired',
+  // ja
+  '一般提供': 'badge--ga', 'プレビュー': 'badge--preview', 'ベータ': 'badge--beta', 'サポート終了': 'badge--retired',
 };
 
 // GCP: Google 4-colour rotation (brand accent, kept on purpose)

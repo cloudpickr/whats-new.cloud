@@ -56,7 +56,8 @@ binding = "AI"
 # and whats-new.cloud) and the API host (api.whats-new.kr) all route to the same
 # Worker; src/worker.ts dispatches /api/* and /mcp to the backend and everything
 # else to Astro SSR. whats-new.cloud currently serves the same content as .kr;
-# to migrate, set the PRIMARY_HOST var (and SITE_URL) so .kr 301s to .cloud.
+# the .kr -> .cloud migration redirect is done at the edge via a Cloudflare
+# Redirect Rule (see .github/workflows/domain-redirect.yml), not in the Worker.
 routes = [
   { pattern = "whats-new.kr", custom_domain = true },
   { pattern = "api.whats-new.kr", custom_domain = true },

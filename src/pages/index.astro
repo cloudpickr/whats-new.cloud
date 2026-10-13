@@ -2,9 +2,9 @@
 import Layout from '../layouts/Layout.astro';
 import { callBackend } from '../lib/apiClient';
 import { PROVIDER_LIST } from '../lib/providers';
-import { resolveLang, LANGS } from '../lib/langs';
+import { resolveActiveLang, LANGS } from '../lib/langs';
 
-const lang = resolveLang(Astro.url.searchParams.get('lang'));
+const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'));
 
 // Edge-cache the rendered HTML at Cloudflare (content refreshes on a 1-min
 // cron): 60s edge copy to cut repeat TTFB, 5-min stale-while-revalidate, and
