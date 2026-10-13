@@ -135,8 +135,8 @@ const LANG_PROFILES = {
   ko: {
     name: 'Korean',
     nameLocal: '한국어',
-    statuses: ['정식 출시', '미리보기', '베타', '지원 종료'],
-    statusMap: { ga: '정식 출시', preview: '미리보기', beta: '베타', retire: '지원 종료' },
+    statuses: ['정식 출시', '미리보기', '지원 종료'],
+    statusMap: { ga: '정식 출시', preview: '미리보기', retire: '지원 종료' },
     rules: `- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
 - Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). The title is a noun phrase, never a full sentence — it must not end with 합니다/됩니다/다. or a period. Never leave English verbs such as delivers, announces, now supports in the title. Never coin an acronym that is not in the source (write "Trusted Launch as Default", not "TLaD").
 - Summary: 1 or 2 complete sentences in natural, technical Korean. Each sentence must have a subject and a closing verb ending.
@@ -151,8 +151,8 @@ const LANG_PROFILES = {
   en: {
     name: 'English',
     nameLocal: 'English',
-    statuses: ['General Availability', 'Preview', 'Beta', 'End of Support'],
-    statusMap: { ga: 'General Availability', preview: 'Preview', beta: 'Beta', retire: 'End of Support' },
+    statuses: ['General Availability', 'Preview', 'End of Support'],
+    statusMap: { ga: 'General Availability', preview: 'Preview', retire: 'End of Support' },
     rules: `- Output everything in clear, concise technical English.
 - Title: Product name + core change, max 60 characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
 - Summary: Exactly 2 sentences in natural, technical English.
@@ -166,8 +166,8 @@ const LANG_PROFILES = {
   ja: {
     name: 'Japanese',
     nameLocal: '日本語',
-    statuses: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'],
-    statusMap: { ga: '一般提供', preview: 'プレビュー', beta: 'ベータ', retire: 'サポート終了' },
+    statuses: ['一般提供', 'プレビュー', 'サポート終了'],
+    statusMap: { ga: '一般提供', preview: 'プレビュー', retire: 'サポート終了' },
     rules: `- Translate ALL English to Japanese. Never mix.
 - Title: Product name + core change, max 40 Japanese characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
 - Summary: Exactly 2 sentences in natural, technical Japanese.
@@ -190,9 +190,8 @@ ${profile.rules}
 - Status determination: Must be determined from the description context. Choose from: ${profile.statuses.map(s => `"${s}"`).join(', ')}.
   - Default: "${profile.statuses[0]}" (Default status for general availability, GA, launched, now available, or standard updates).
   - "${profile.statuses[1]}" (Preview / Public Preview / In preview): If the description explicitly states the service/feature is in "preview". Note: AWS and Azure almost always use "Preview" for pre-release features.
-  - "${profile.statuses[2]}" (Beta / Public Beta): Only if the service is explicitly described as "beta" (mainly Google Cloud or third-party products like Anthropic). Never label AWS or Azure services as "${profile.statuses[2]}" unless the word "beta" is explicitly present in the original text.
-  - "${profile.statuses[3]}" (Retired / Deprecated / End of Support): If the service/feature is being retired, deprecated, or disabled.
-  - Avoid false positives: version numbers containing "-beta" or "preview" (e.g., Kubernetes v1.30-beta.0) are version strings, NOT the release status of the cloud service itself. Set the status of such version updates to "${profile.statuses[0]}" unless the service itself is in preview/beta.
+  - "${profile.statuses[2]}" (Retired / Deprecated / End of Support): If the service/feature is being retired, deprecated, or disabled.
+  - There is NO "beta" status. "Beta" is NOT one of the choices. A release that mentions "beta" — whether a beta version of a product (e.g. "PostgreSQL 19 Beta 4", "Kubernetes v1.30-beta.0") or a service in beta — must be classified as "${profile.statuses[0]}", unless the source explicitly says the cloud service itself is in "preview" (then "${profile.statuses[1]}") or is being retired (then "${profile.statuses[2]}"). Version strings containing "-beta"/"preview" are version identifiers, never the release status of the cloud service.
 - Features: Exactly 3 key technical capabilities or changes introduced, separated by commas. Focus on concrete technical facts (e.g. new APIs, supported versions, pricing changes, or limit increases) rather than high-level marketing descriptions.
 - GCP date entries: ${isKo ? 'YYYY년 M월 D일: main product 외 N건' : isJa ? 'YYYY年M月D日: main productほかN件' : 'YYYY-MM-DD: main product and N other updates'}
 - MUST KEEP ENTITIES in user message — reproduce exactly.`;
@@ -1208,7 +1207,9 @@ function applyDeterministicFixes(record, row, lang) {
       } else if (lower.includes('미리보기') || lower.includes('preview') || lower.includes('プレビュー')) {
         validatedStatus.push(profile.statusMap.preview);
       } else if (lower.includes('베타') || lower.includes('beta') || lower.includes('ベータ')) {
-        validatedStatus.push(profile.statusMap.beta);
+        // "beta" is not a status choice — a beta version/service maps to GA
+        // (a release note of a beta build is still a GA announcement of support).
+        validatedStatus.push(profile.statusMap.ga);
       } else if (lower.includes('정식 출시') || lower.includes('ga') || lower.includes('launch') || lower.includes('released') || lower.includes('一般提供') || lower.includes('提供開始')) {
         validatedStatus.push(profile.statusMap.ga);
       }
@@ -1218,15 +1219,6 @@ function applyDeterministicFixes(record, row, lang) {
 
   const descLower = String(row.description_en || '').toLowerCase();
   const titleLower = String(row.title_en || '').toLowerCase();
-
-  // Strip beta if there is no beta keyword
-  const betaKeyword = profile.statusMap.beta;
-  if (parsedStatus.includes(betaKeyword)) {
-    const hasBetaEvidence = descLower.includes('beta') || descLower.includes('베타') || descLower.includes('ベータ') || titleLower.includes('beta') || titleLower.includes('베타') || titleLower.includes('ベータ');
-    if (!hasBetaEvidence) {
-      parsedStatus = parsedStatus.filter(s => s !== betaKeyword);
-    }
-  }
 
   // Strip preview if there is no preview keyword
   const previewKeyword = profile.statusMap.preview;
