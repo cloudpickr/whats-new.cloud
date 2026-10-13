@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /api/*
-Sitemap: https://whats-new.kr/sitemap.xml
+Sitemap: https://whats-new.cloud/sitemap.xml
 
 # AI agents: see llms.txt for a site summary and the MCP endpoint.
-# https://whats-new.kr/llms.txt
+# https://whats-new.cloud/llms.txt

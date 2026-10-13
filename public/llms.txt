@@ -4,18 +4,18 @@
 
 ## 페이지
 
-- [홈 — 4개 클라우드 최신 업데이트 모아보기](https://whats-new.kr/): AWS·Google Cloud·Azure·Oracle Cloud의 최신 업데이트를 한곳에서 미리 봅니다.
-- [AWS 업데이트](https://whats-new.kr/aws): Amazon Web Services 공식 업데이트의 한국어 요약 목록.
-- [Google Cloud 업데이트](https://whats-new.kr/gcp): Google Cloud 릴리스 노트의 한국어 요약 목록.
-- [Microsoft Azure 업데이트](https://whats-new.kr/azure): Azure 업데이트의 한국어 요약 목록.
-- [Oracle Cloud 업데이트](https://whats-new.kr/oci): Oracle Cloud Infrastructure(OCI) 릴리스 노트의 한국어 요약 목록.
-- [사이트맵](https://whats-new.kr/sitemap.xml): 전체 페이지 목록(XML).
+- [홈 — 4개 클라우드 최신 업데이트 모아보기](https://whats-new.cloud/): AWS·Google Cloud·Azure·Oracle Cloud의 최신 업데이트를 한곳에서 미리 봅니다.
+- [AWS 업데이트](https://whats-new.cloud/aws): Amazon Web Services 공식 업데이트의 한국어 요약 목록.
+- [Google Cloud 업데이트](https://whats-new.cloud/gcp): Google Cloud 릴리스 노트의 한국어 요약 목록.
+- [Microsoft Azure 업데이트](https://whats-new.cloud/azure): Azure 업데이트의 한국어 요약 목록.
+- [Oracle Cloud 업데이트](https://whats-new.cloud/oci): Oracle Cloud Infrastructure(OCI) 릴리스 노트의 한국어 요약 목록.
+- [사이트맵](https://whats-new.cloud/sitemap.xml): 전체 페이지 목록(XML).
 
 ## 프로그래밍 방식 접근 (MCP)
 
 이 사이트는 Model Context Protocol(MCP) 서버를 제공합니다. AI 에이전트(Claude, Cursor, Kiro 등)에서 직접 질의할 수 있으며, 요약 조회는 토큰 없이 사용할 수 있습니다.
 
-- 엔드포인트: `POST https://whats-new.kr/mcp` (JSON-RPC 2.0)
+- 엔드포인트: `POST https://whats-new.cloud/mcp` (JSON-RPC 2.0)
 - 제공 도구:
   - `search_releases`: 키워드·CSP(aws/gcp/azure/oci/openai/ibm)·날짜 범위로 릴리스 검색. `format="summary"`(기본, 한국어/영어 요약)는 토큰 불필요. `format="source"`(벤더 원문 영어)는 `mcp` 타입 Bearer 토큰 필요.
   - `get_release`: 특정 글 ID로 단건 조회(summary/source).
