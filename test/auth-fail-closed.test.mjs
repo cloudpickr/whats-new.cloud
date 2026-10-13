@@ -198,13 +198,22 @@ describe('worker auth fails closed', { concurrency: 1 }, () => {
     assert.equal(wrongType.response.status, 401);
   });
 
-  test('GET /api/stats and MCP get_stats stay public', async () => {
-    const stats = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/api/stats');
-    assert.equal(stats.response.status, 200);
-    assert.equal(stats.json.backlog, 0);
-    assert.ok(stats.json.models.translation);
+  test('GET /api/stats and MCP get_stats require a token (internal metrics)', async () => {
+    // Anonymous /api/stats is rejected — it exposes pipeline internals + model IDs.
+    const statsAnon = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/api/stats');
+    assert.equal(statsAnon.response.status, 401);
+    assert.equal(statsAnon.json.error, 'Unauthorized');
 
-    const mcp = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/mcp', {
+    // With a valid token it returns the metrics.
+    const statsAuthed = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/api/stats', {
+      headers: { Authorization: `Bearer ${MCP_TOKEN}` },
+    });
+    assert.equal(statsAuthed.response.status, 200);
+    assert.equal(statsAuthed.json.backlog, 0);
+    assert.ok(statsAuthed.json.models.translation);
+
+    // Anonymous MCP get_stats is denied.
+    const mcpAnon = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/mcp', {
       method: 'POST',
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -213,22 +222,59 @@ describe('worker auth fails closed', { concurrency: 1 }, () => {
         params: { name: 'get_stats', arguments: {} },
       }),
     });
-    assert.equal(mcp.response.status, 200);
-    assert.equal(mcp.response.headers.get('X-Auth-Status'), 'anonymous');
-    const payload = JSON.parse(mcp.json.result.content[0].text);
+    assert.equal(mcpAnon.response.status, 200);
+    assert.equal(mcpAnon.json.error.code, -32001);
+
+    // Authenticated MCP get_stats returns the metrics.
+    const mcpAuthed = await call(createEnv({ AUTH_ENFORCEMENT: 'on' }), '/mcp', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${MCP_TOKEN}` },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'get_stats', arguments: {} },
+      }),
+    });
+    assert.equal(mcpAuthed.response.status, 200);
+    assert.equal(mcpAuthed.response.headers.get('X-Auth-Status'), 'authenticated');
+    const payload = JSON.parse(mcpAuthed.json.result.content[0].text);
     assert.equal(payload.backlog, 0);
 
+    // search_releases summary stays public (no token needed).
     const search = await call(createEnv(), '/mcp', {
       method: 'POST',
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: 2,
+        id: 3,
         method: 'tools/call',
         params: { name: 'search_releases', arguments: { query: 'public', csp: 'aws' } },
       }),
     });
     assert.equal(search.response.status, 200);
     assert.equal(search.json.result.content[0].text.trim(), '[]');
+  });
+
+  test('tools/list hides internal capabilities from anonymous callers', async () => {
+    const anon = await call(createEnv(), '/mcp', {
+      method: 'POST',
+      body: JSON.stringify({ jsonrpc: '2.0', id: 10, method: 'tools/list' }),
+    });
+    const anonTools = anon.json.result.tools;
+    const anonNames = anonTools.map((t) => t.name);
+    assert.equal(anonNames.includes('get_stats'), false, 'get_stats must not be listed anonymously');
+    const anonSearch = anonTools.find((t) => t.name === 'search_releases');
+    assert.equal('format' in anonSearch.inputSchema.properties, false, 'format param must be hidden anonymously');
+
+    const authed = await call(createEnv(), '/mcp', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${MCP_TOKEN}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 11, method: 'tools/list' }),
+    });
+    const authedNames = authed.json.result.tools.map((t) => t.name);
+    assert.equal(authedNames.includes('get_stats'), true, 'get_stats listed for authenticated callers');
+    const authedSearch = authed.json.result.tools.find((t) => t.name === 'search_releases');
+    assert.equal('format' in authedSearch.inputSchema.properties, true, 'format param shown for authenticated callers');
   });
 
   test('format=source still requires an mcp token', async () => {

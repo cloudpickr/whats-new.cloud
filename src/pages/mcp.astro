@@ -16,10 +16,11 @@ Astro.response.headers.set(
 const MCP_ENDPOINT = new URL('/mcp', Astro.site).toString();
 
 // Tool metadata mirrors worker/index.js tools/list (keep names in sync).
+// Only the user-facing tools are listed. `format`/source params and the
+// get_stats pipeline tool are internal-only and intentionally omitted here.
 const TOOLS = [
-  { name: 'search_releases', params: 'query · csp · lang · format · days · start_date · end_date · limit' },
-  { name: 'get_release', params: 'id · lang · format' },
-  { name: 'get_stats', params: '—' },
+  { name: 'search_releases', params: 'query · csp · lang · days · start_date · end_date · limit' },
+  { name: 'get_release', params: 'id · lang' },
 ] as const;
 
 type Strings = {
@@ -36,8 +37,15 @@ type Strings = {
   toolDesc: Record<string, string>;
   setupHeading: string;
   setupIntro: string;
-  authHeading: string;
-  authBody: string;
+  langHeading: string;
+  langIntro: string;
+  langParamLabel: string;
+  langValuesLabel: string;
+  langValuesBody: string;
+  langDefaultLabel: string;
+  langDefaultBody: string;
+  langFallbackLabel: string;
+  langFallbackBody: string;
   siteCta: string;
   browserNote: string;
 };
@@ -56,13 +64,19 @@ const UI: Record<string, Strings> = {
     toolsIntro: 'JSON-RPC 2.0 메서드 tools/call 로 호출할 수 있는 도구입니다.',
     toolDesc: {
       search_releases: '키워드·공급자(CSP)·기간으로 릴리스 노트를 검색합니다. aws/gcp/azure/oci는 한국어·영어 AI 요약을 제공합니다.',
-      get_release: '기사 ID로 특정 릴리스 노트를 가져옵니다. 요약 또는 원문(source) 형식을 선택할 수 있습니다.',
-      get_stats: '현재 번역·검수 파이프라인 상태를 조회합니다.',
+      get_release: '기사 ID로 특정 릴리스 노트를 가져옵니다.',
     },
     setupHeading: 'MCP 클라이언트 설정',
     setupIntro: '사용하는 MCP 클라이언트(예: Claude Desktop, Cursor 등)의 설정에 아래 엔드포인트를 추가하세요.',
-    authHeading: '인증',
-    authBody: '검색·요약 조회는 인증 없이 사용할 수 있습니다. 벤더 원문(format="source") 호출만 MCP 토큰(Authorization: Bearer)이 필요합니다.',
+    langHeading: '언어 옵션 (lang)',
+    langIntro: 'search_releases·get_release 도구는 lang 파라미터로 요약의 출력 언어를 지정합니다.',
+    langParamLabel: '파라미터',
+    langValuesLabel: '지원 값',
+    langValuesBody: 'ko (한국어), en (영어). aws·gcp·azure·oci의 AI 요약에 적용됩니다.',
+    langDefaultLabel: '기본값',
+    langDefaultBody: '생략하면 ko(한국어)로 응답합니다.',
+    langFallbackLabel: '폴백',
+    langFallbackBody: '요청한 언어의 요약이 아직 없으면 영어 요약으로 대체되어 제공됩니다.',
     siteCta: '웹사이트로 돌아가기',
     browserNote: '이 페이지는 브라우저로 접속했을 때 보이는 안내입니다. MCP 클라이언트는 이 주소로 JSON-RPC(POST) 요청을 보내 응답을 받습니다.',
   },
@@ -79,13 +93,20 @@ const UI: Record<string, Strings> = {
     toolsIntro: 'Tools you can invoke via the JSON-RPC 2.0 tools/call method.',
     toolDesc: {
       search_releases: 'Search release notes by keyword, cloud provider (CSP), or date range. aws/gcp/azure/oci provide Korean and English AI summaries.',
-      get_release: 'Fetch a specific release note by article ID, as a summary or vendor-original source.',
+      get_release: 'Fetch a specific release note by article ID.',
       get_stats: 'Get the current translation / review pipeline status.',
     },
     setupHeading: 'MCP client setup',
     setupIntro: 'Add the endpoint below to your MCP client configuration (e.g. Claude Desktop, Cursor).',
-    authHeading: 'Authentication',
-    authBody: 'Search and summary calls work without authentication. Only vendor-original source calls (format="source") require an MCP token (Authorization: Bearer).',
+    langHeading: 'Language option (lang)',
+    langIntro: 'The search_releases and get_release tools take a lang parameter that sets the summary output language.',
+    langParamLabel: 'Parameter',
+    langValuesLabel: 'Values',
+    langValuesBody: 'ko (Korean), en (English). Applies to the AI summaries for aws, gcp, azure, and oci.',
+    langDefaultLabel: 'Default',
+    langDefaultBody: 'If omitted, responses are returned in ko (Korean).',
+    langFallbackLabel: 'Fallback',
+    langFallbackBody: 'If a summary in the requested language is not available yet, the English summary is served instead.',
     siteCta: 'Back to the website',
     browserNote: 'This page is what you see in a browser. MCP clients send JSON-RPC (POST) requests to this same URL and receive machine responses.',
   },
@@ -102,13 +123,20 @@ const UI: Record<string, Strings> = {
     toolsIntro: 'JSON-RPC 2.0 の tools/call メソッドで呼び出せるツールです。',
     toolDesc: {
       search_releases: 'キーワード・クラウドプロバイダー（CSP）・期間でリリースノートを検索します。aws/gcp/azure/oci は日本語・英語の AI 要約を提供します。',
-      get_release: '記事 ID で特定のリリースノートを取得します。要約またはベンダー原文（source）形式を選べます。',
+      get_release: '記事 ID で特定のリリースノートを取得します。',
       get_stats: '現在の翻訳・レビューパイプラインの状態を取得します。',
     },
     setupHeading: 'MCP クライアント設定',
     setupIntro: 'お使いの MCP クライアント（Claude Desktop、Cursor など）の設定に、以下のエンドポイントを追加してください。',
-    authHeading: '認証',
-    authBody: '検索・要約の取得は認証なしで利用できます。ベンダー原文（format="source"）の呼び出しのみ MCP トークン（Authorization: Bearer）が必要です。',
+    langHeading: '言語オプション (lang)',
+    langIntro: 'search_releases・get_release ツールは lang パラメータで要約の出力言語を指定します。',
+    langParamLabel: 'パラメータ',
+    langValuesLabel: '対応する値',
+    langValuesBody: 'ko（韓国語）、en（英語）。aws・gcp・azure・oci の AI 要約に適用されます。',
+    langDefaultLabel: 'デフォルト',
+    langDefaultBody: '省略した場合は ko（韓国語）で応答します。',
+    langFallbackLabel: 'フォールバック',
+    langFallbackBody: 'リクエストした言語の要約がまだない場合は、英語の要約で代替して提供します。',
     siteCta: 'ウェブサイトに戻る',
     browserNote: 'このページはブラウザでアクセスしたときに表示される案内です。MCP クライアントはこの URL に JSON-RPC（POST）リクエストを送り、応答を受け取ります。',
   },
@@ -140,16 +168,17 @@ const structuredData = {
   lang={lang}
   structuredData={structuredData}
 >
-  <!-- Hero: mirrors the home page glow + gradient-title treatment -->
-  <div class="hero-band relative text-center py-10 sm:py-20 mb-8 overflow-hidden rounded-3xl" style="background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 5%, transparent), color-mix(in srgb, var(--color-accent) 5%, transparent)); border: 1px solid var(--color-border);">
-    <div class="absolute -top-24 -left-24 w-48 h-48 rounded-full blur-3xl opacity-20" style="background: var(--color-primary);"></div>
-    <div class="absolute -bottom-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20" style="background: var(--color-accent);"></div>
+  <!-- Hero: compact variant of the home glow + gradient-title treatment.
+       Shorter padding/title so the page leads with the MCP guidance below. -->
+  <div class="hero-band relative text-center py-5 sm:py-8 mb-6 overflow-hidden rounded-2xl" style="background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 5%, transparent), color-mix(in srgb, var(--color-accent) 5%, transparent)); border: 1px solid var(--color-border);">
+    <div class="absolute -top-16 -left-16 w-32 h-32 rounded-full blur-3xl opacity-20" style="background: var(--color-primary);"></div>
+    <div class="absolute -bottom-16 -right-16 w-32 h-32 rounded-full blur-3xl opacity-20" style="background: var(--color-accent);"></div>
 
-    <h1 class="text-3xl sm:text-5xl font-black mb-4 tracking-tight" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
+    <h1 class="text-xl sm:text-3xl font-black mb-1.5 tracking-tight" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
       ☁️ What's New <span class="bg-clip-text text-transparent bg-gradient-to-r" style="background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));">in Cloud</span>
       <span class="text-xs font-semibold px-2 py-0.5 rounded-full ml-1" style="background: color-mix(in srgb, var(--color-primary) 15%, transparent); color: var(--color-primary); vertical-align: middle;">{t.tagline}</span>
     </h1>
-    <p class="text-sm sm:text-lg max-w-xl mx-auto leading-relaxed" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
+    <p class="text-xs sm:text-sm max-w-xl mx-auto leading-relaxed" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
       <span class="font-medium">{t.subtitle}</span>
     </p>
   </div>
@@ -192,10 +221,28 @@ const structuredData = {
       </ul>
     </section>
 
-    <!-- Auth card -->
+    <!-- Language card -->
     <section class="p-5 sm:p-6 rounded-2xl" style="background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--card-shadow);">
-      <h2 class="text-lg font-extrabold tracking-tight mb-1" style="color: var(--color-text-primary);">{t.authHeading}</h2>
-      <p class="text-sm leading-relaxed" style="color: var(--color-text-secondary);">{t.authBody}</p>
+      <h2 class="text-lg font-extrabold tracking-tight mb-1" style="color: var(--color-text-primary);">{t.langHeading}</h2>
+      <p class="text-sm leading-relaxed mb-4" style="color: var(--color-text-secondary);">{t.langIntro}</p>
+      <dl class="space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
+          <dt class="shrink-0 w-28 text-xs font-bold uppercase tracking-wide" style="color: var(--color-text-secondary);">{t.langParamLabel}</dt>
+          <dd class="text-sm leading-relaxed" style="color: var(--color-text-primary);"><code class="font-mono font-semibold" style="color: var(--color-primary);">lang</code></dd>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
+          <dt class="shrink-0 w-28 text-xs font-bold uppercase tracking-wide" style="color: var(--color-text-secondary);">{t.langValuesLabel}</dt>
+          <dd class="text-sm leading-relaxed" style="color: var(--color-text-primary);">{t.langValuesBody}</dd>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
+          <dt class="shrink-0 w-28 text-xs font-bold uppercase tracking-wide" style="color: var(--color-text-secondary);">{t.langDefaultLabel}</dt>
+          <dd class="text-sm leading-relaxed" style="color: var(--color-text-primary);">{t.langDefaultBody}</dd>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3">
+          <dt class="shrink-0 w-28 text-xs font-bold uppercase tracking-wide" style="color: var(--color-text-secondary);">{t.langFallbackLabel}</dt>
+          <dd class="text-sm leading-relaxed" style="color: var(--color-text-primary);">{t.langFallbackBody}</dd>
+        </div>
+      </dl>
     </section>
 
     <div class="text-center pt-2">
