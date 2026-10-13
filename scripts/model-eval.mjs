@@ -73,6 +73,9 @@ import {
 
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+// NOTE: fallback stays whats-new.kr (not .cloud) on purpose — this derives the
+// API host as api.<host>, and the API custom domain is still api.whats-new.kr.
+// The public site moved to .cloud, but the API host has not. CI sets SITE_URL.
 const SITE_URL = process.env.SITE_URL || 'https://whats-new.kr';
 const API = process.env.API_BASE || `https://api.${new URL(SITE_URL).host}`;
 const MCP_TOKEN = process.env.MCP_TOKEN || '';
