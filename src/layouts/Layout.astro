@@ -195,6 +195,24 @@ const fontPreload: Record<string, string> = Object.fromEntries(
       });
     </script>
     <script is:inline>
+      // Language persistence — runs during <head> parse, BEFORE any navigation
+      // handler binds and before astro:page-load. If the page was entered via an
+      // explicit ?lang= (e.g. a shared link), write the `lang` cookie
+      // immediately so that any subsequent navigation — a nav link click, the
+      // logo, a ClientRouter fetch — carries the cookie and the server renders
+      // the same language. Previously this only happened in initLangSwitcher on
+      // astro:page-load, leaving a race where clicking a nav link (whose href
+      // has no ?lang) before the cookie was set reset the language to ko.
+      (function () {
+        try {
+          var q = new URL(window.location.href).searchParams.get('lang');
+          if (q === 'ko' || q === 'en' || q === 'ja') {
+            document.cookie = 'lang=' + q + '; path=/; max-age=31536000; SameSite=Lax; Secure';
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script is:inline>
       (function () {
         function isDark() {
           const stored = localStorage.getItem('theme');
@@ -278,8 +296,10 @@ const fontPreload: Record<string, string> = Object.fromEntries(
       // SSR re-renders in that language and the address bar stays tidy.
       function initLangSwitcher() {
         const order = ['ko', 'en', 'ja'];
-        // If arriving via an explicit ?lang= (e.g. a shared link), remember it
-        // in the cookie so it persists as the user navigates to clean URLs.
+        // Cookie sync also runs here (and additionally in a <head> inline script
+        // on first load, and on astro:before-preparation before every
+        // client-side navigation) so a ?lang= in the URL is persisted before any
+        // navigation can drop it.
         const urlLang = new URL(window.location.href).searchParams.get('lang');
         if (urlLang && order.includes(urlLang)) {
           document.cookie = `lang=${urlLang}; path=/; max-age=31536000; SameSite=Lax; Secure`;
@@ -339,6 +359,20 @@ const fontPreload: Record<string, string> = Object.fromEntries(
         });
       }
       document.addEventListener('astro:page-load', initLangSwitcher);
+      // Before every client-side navigation, make sure the cookie reflects the
+      // language currently in the address bar (if it carries ?lang). The
+      // ClientRouter fetch for the next page is same-origin and sends cookies,
+      // so persisting here guarantees the server renders the destination in the
+      // same language — closing the race where a nav link (href has no ?lang)
+      // was followed before the cookie had been written.
+      document.addEventListener('astro:before-preparation', () => {
+        try {
+          const q = new URL(window.location.href).searchParams.get('lang');
+          if (q === 'ko' || q === 'en' || q === 'ja') {
+            document.cookie = `lang=${q}; path=/; max-age=31536000; SameSite=Lax; Secure`;
+          }
+        } catch (e) {}
+      });
     </script>
     <script>
       function initThemeToggle() {
