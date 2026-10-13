@@ -226,16 +226,34 @@ const fontPreload: Record<string, string> = Object.fromEntries(
               {cspNames[c]}
             </a>
           ))}
-          <button
-            type="button"
-            id="lang-toggle"
-            class="lang-toggle"
-            data-current={activeLang.id}
-            aria-label={`언어: ${activeLang.label} (누르면 ${LANGS[LANG_IDS[(LANG_IDS.indexOf(activeLang.id) + 1) % LANG_IDS.length]].label})`}
-            title={activeLang.label}>
-            <span class="lang-toggle__emoji" aria-hidden="true">{activeLang.flag}</span>
-            <span class="lang-toggle__code">{activeLang.code}</span>
-          </button>
+          <div class="lang-menu">
+            <button
+              type="button"
+              id="lang-toggle"
+              class="lang-toggle"
+              data-current={activeLang.id}
+              aria-expanded="false"
+              aria-controls="lang-dropdown"
+              aria-label={`언어 선택 — 현재 ${activeLang.label}`}
+              title={activeLang.label}>
+              <span class="lang-toggle__emoji" aria-hidden="true">{activeLang.flag}</span>
+              <svg class="lang-toggle__caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <ul id="lang-dropdown" class="lang-dropdown" aria-label="언어 선택" hidden>
+              {LANG_IDS.map((id) => (
+                <li>
+                  <button
+                    type="button"
+                    aria-current={id === activeLang.id ? 'true' : undefined}
+                    class={`lang-dropdown__item${id === activeLang.id ? ' is-active' : ''}`}
+                    data-lang={id}>
+                    <span class="lang-dropdown__emoji" aria-hidden="true">{LANGS[id].flag}</span>
+                    <span>{LANGS[id].label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
           <button id="theme-toggle" type="button" aria-label="다크 모드 전환" aria-pressed="false" class="ml-2 p-1.5 rounded transition-colors" style="color: var(--nav-item-color);">
             <svg id="icon-dark" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
             <svg id="icon-light" class="hidden w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
@@ -277,16 +295,45 @@ const fontPreload: Record<string, string> = Object.fromEntries(
         }
 
         const order = ['ko', 'en', 'ja'];
-        const toggle = document.getElementById('lang-toggle');
-        if (!toggle) return;
-        toggle.addEventListener('click', () => {
-          const current = toggle.dataset.current || 'ko';
-          const next = order[(order.indexOf(current) + 1) % order.length];
+        const toggleEl = document.getElementById('lang-toggle');
+        const dropdown = document.getElementById('lang-dropdown');
+        if (!toggleEl || !dropdown) return;
+        const toggle = toggleEl;
+        const menu = dropdown;
+
+        function openMenu() {
+          menu.hidden = false;
+          toggle.setAttribute('aria-expanded', 'true');
+          document.addEventListener('click', onDocClick, true);
+          document.addEventListener('keydown', onKeydown);
+        }
+        function closeMenu() {
+          menu.hidden = true;
+          toggle.setAttribute('aria-expanded', 'false');
+          document.removeEventListener('click', onDocClick, true);
+          document.removeEventListener('keydown', onKeydown);
+        }
+        function onDocClick(e: MouseEvent) {
+          if (!menu.contains(e.target as Node) && !toggle.contains(e.target as Node)) closeMenu();
+        }
+        function onKeydown(e: KeyboardEvent) {
+          if (e.key === 'Escape') { closeMenu(); toggle.focus(); }
+        }
+        function go(next: string) {
+          if (!order.includes(next)) return;
           try { localStorage.setItem('lang', next); } catch { /* ignore */ }
           const u = new URL(window.location.href);
           if (next === 'ko') u.searchParams.delete('lang');
           else u.searchParams.set('lang', next);
           window.location.assign(u.pathname + u.search + u.hash);
+        }
+
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (menu.hidden) openMenu(); else closeMenu();
+        });
+        menu.querySelectorAll<HTMLElement>('.lang-dropdown__item').forEach((item) => {
+          item.addEventListener('click', () => go(item.dataset.lang || 'ko'));
         });
       }
       document.addEventListener('astro:page-load', initLangSwitcher);

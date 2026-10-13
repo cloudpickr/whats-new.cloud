@@ -13,8 +13,6 @@ export interface Lang {
   label: string;
   /** Flag emoji for the compact switcher (legible on mobile). */
   flag: string;
-  /** 2-letter code shown alongside the flag (fallback where flag emoji don't render, e.g. Windows). */
-  code: string;
   /** BCP-47 tag for <html lang> and Intl date formatting. */
   bcp47: string;
   /** Open Graph locale. */
@@ -24,9 +22,9 @@ export interface Lang {
 }
 
 export const LANGS: Record<Lang['id'], Lang> = {
-  ko: { id: 'ko', label: '한국어', flag: '🇰🇷', code: 'KO', bcp47: 'ko-KR', ogLocale: 'ko_KR', hreflang: 'ko' },
-  en: { id: 'en', label: 'English', flag: '🇺🇸', code: 'EN', bcp47: 'en-US', ogLocale: 'en_US', hreflang: 'en' },
-  ja: { id: 'ja', label: '日本語', flag: '🇯🇵', code: 'JA', bcp47: 'ja-JP', ogLocale: 'ja_JP', hreflang: 'ja' },
+  ko: { id: 'ko', label: '한국어', flag: '🇰🇷', bcp47: 'ko-KR', ogLocale: 'ko_KR', hreflang: 'ko' },
+  en: { id: 'en', label: 'English', flag: '🇺🇸', bcp47: 'en-US', ogLocale: 'en_US', hreflang: 'en' },
+  ja: { id: 'ja', label: '日本語', flag: '🇯🇵', bcp47: 'ja-JP', ogLocale: 'ja_JP', hreflang: 'ja' },
 };
 
 export const LANG_IDS = Object.keys(LANGS) as Lang['id'][];
