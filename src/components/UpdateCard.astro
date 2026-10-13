@@ -2,16 +2,14 @@
 interface Props {
   title: string; date: string; content: string; csp?: string;
   target?: string; features?: string; regions?: string; status?: string;
-  originalLink?: string; index?: number; articleId?: number; isFallback?: boolean;
+  originalLink?: string; index?: number; articleId?: number;
   openLabel?: string;
-  fallbackLabel?: string;
   kvLabels?: { target: string; features: string; regions: string };
 }
 
 const {
   title, date, content, csp, target, features, regions, status, originalLink,
-  index = 0, articleId, isFallback = false, openLabel = '원문 보기',
-  fallbackLabel = '번역 준비중',
+  index = 0, articleId, openLabel = '원문 보기',
   kvLabels = { target: '대상', features: '기능', regions: '리전' },
 } = Astro.props;
 
@@ -45,18 +43,17 @@ const rows = [
 
 <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
   id={articleId != null ? String(articleId) : undefined}
-  class={`update-card${isFallback ? ' card-fallback' : ''}`}
+  class="update-card"
   aria-label={`${title} — ${openLabel}`}
   style={cardStyle}>
   <div class="update-card__inner">
     <div>
       <div class="update-card__meta">
-        {isFallback && <span class="badge badge--fallback">{fallbackLabel}</span>}
         {statuses.map(s => <span class={`badge ${statusClass[s] || 'badge--other'}`}>{s}</span>)}
         {date && <time class="update-card__date">{date}</time>}
       </div>
       <h3 class="update-card__title">{title}</h3>
-      <p class={`update-card__body${isFallback ? ' line-clamp-3' : ''}`}>{content}</p>
+      <p class="update-card__body">{content}</p>
     </div>
     {hasDetails && (
       <div class="kv">
@@ -149,7 +146,6 @@ const rows = [
     let longPressTimer: ReturnType<typeof setTimeout>;
     if ('ontouchstart' in window) {
       document.querySelectorAll<HTMLAnchorElement>('.update-card').forEach((card) => {
-        let expanded = false;
         let longPressed = false;
         card.addEventListener('touchstart', (e) => {
           longPressed = false;
@@ -163,14 +159,9 @@ const rows = [
         card.addEventListener('touchend', () => clearTimeout(longPressTimer));
         card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
         card.addEventListener('click', (e) => {
-          if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
-          if (!expanded && card.classList.contains('card-fallback')) {
-            e.preventDefault();
-            card.querySelectorAll<HTMLElement>('.line-clamp-3').forEach((el) => {
-              el.style.webkitLineClamp = 'unset';
-            });
-            expanded = true;
-          }
+          // After a long-press (which opened the context menu), swallow the
+          // click so it doesn't also navigate. Otherwise let the link work.
+          if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); }
         });
       });
     }

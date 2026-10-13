@@ -33,10 +33,10 @@ try {
 // Per-language UI strings and status vocabulary. Status values are stored in
 // the target language (worker LANG_PROFILES), so the filter must match the
 // language being shown. Each status maps to a stable class for styling.
-const STATUS_BY_LANG: Record<string, { order: string[]; cls: Record<string, string>; fallback: string }> = {
-  ko: { order: ['정식 출시', '미리보기', '베타', '지원 종료'], cls: { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired' }, fallback: '번역 준비중' },
-  en: { order: ['General Availability', 'Preview', 'Beta', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'Beta': 'beta', 'End of Support': 'retired' }, fallback: 'Pending translation' },
-  ja: { order: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'ベータ': 'beta', 'サポート終了': 'retired' }, fallback: '翻訳準備中' },
+const STATUS_BY_LANG: Record<string, { order: string[]; cls: Record<string, string> }> = {
+  ko: { order: ['정식 출시', '미리보기', '베타', '지원 종료'], cls: { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired' } },
+  en: { order: ['General Availability', 'Preview', 'Beta', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'Beta': 'beta', 'End of Support': 'retired' } },
+  ja: { order: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'ベータ': 'beta', 'サポート終了': 'retired' } },
 };
 const UI: Record<string, { updates: string; lastUpdated: string; search: string; shareFilter: string; linkCopied: string; openLabel: string; kv: { target: string; features: string; regions: string }; feedDesc: (name: string, url: string) => string; empty: string; noResults: string }> = {
   ko: { updates: '업데이트', lastUpdated: '최종 업데이트', search: '검색...', shareFilter: '현재 필터 링크 복사', linkCopied: '링크가 복사되었습니다', openLabel: '원문 보기', kv: { target: '대상', features: '기능', regions: '리전' }, feedDesc: (n, u) => `${n} <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.`, empty: '업데이트가 없습니다.', noResults: '검색 결과가 없습니다.' },
@@ -46,38 +46,32 @@ const UI: Record<string, { updates: string; lastUpdated: string; search: string;
 const t = UI[lang];
 const statusMeta = STATUS_BY_LANG[lang];
 const STATUS_ORDER = statusMeta.order;
-const FALLBACK_LABEL = statusMeta.fallback;
 
 const rss = provider.official;
 const names: Record<string, string> = { [csp]: provider.name };
 const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString(LANGS[lang].bcp47, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
-// Status counting (STATUS_ORDER/FALLBACK_LABEL are lang-aware, defined above)
+// Status counting (STATUS_ORDER is lang-aware, defined above)
 const statusCounts: Record<string, number> = {};
 for (const a of articles) {
-  if (a.is_fallback) {
-    statusCounts[FALLBACK_LABEL] = (statusCounts[FALLBACK_LABEL] || 0) + 1;
-  } else {
-    try {
-      const ss = JSON.parse(a.status || '[]');
-      const arr: string[] = Array.isArray(ss) ? ss : [];
-      for (const s of arr) {
-        if (STATUS_ORDER.includes(s)) statusCounts[s] = (statusCounts[s] || 0) + 1;
-      }
-    } catch { /* ignore */ }
-  }
+  try {
+    const ss = JSON.parse(a.status || '[]');
+    const arr: string[] = Array.isArray(ss) ? ss : [];
+    for (const s of arr) {
+      if (STATUS_ORDER.includes(s)) statusCounts[s] = (statusCounts[s] || 0) + 1;
+    }
+  } catch { /* ignore */ }
 }
 
 function getArticleStatuses(a: any): string {
-  if (a.is_fallback) return FALLBACK_LABEL;
   try {
     const ss = JSON.parse(a.status || '[]');
     return Array.isArray(ss) ? ss.join(',') : '';
   } catch { return ''; }
 }
 
-const filterClass: Record<string, string> = { ...statusMeta.cls, [FALLBACK_LABEL]: 'fallback' };
-const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts[FALLBACK_LABEL] ? [FALLBACK_LABEL] : [])];
+const filterClass: Record<string, string> = { ...statusMeta.cls };
+const activeStatusFilters = STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0);
 const categoryUrl = new URL(`/${csp}`, Astro.site).toString();
 const structuredData = [
   {
@@ -174,7 +168,7 @@ const structuredData = [
           title={a.title} csp={a.csp} index={i}
           date={a.pub_date ? new Date(a.pub_date).toLocaleDateString(LANGS[lang].bcp47, { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
           content={a.summary || ''} target={a.target} features={a.features}
-          regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} articleId={a.article_id} openLabel={t.openLabel} fallbackLabel={FALLBACK_LABEL} kvLabels={t.kv} />
+          regions={a.regions} status={a.status} originalLink={a.url} articleId={a.article_id} openLabel={t.openLabel} kvLabels={t.kv} />
       </div>
     ))}
   </div>
