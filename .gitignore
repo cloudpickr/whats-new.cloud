@@ -14,4 +14,3 @@ worker-configuration.d.ts
 
 # semantic_reviewer agent output — local review notes, not tracked
 docs/reviews/
-semantic-review/
