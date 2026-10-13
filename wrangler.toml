@@ -52,13 +52,15 @@ crons = ["*/1 * * * *"]
 [ai]
 binding = "AI"
 
-# Custom domains served by this unified Worker. Both the public site
-# (whats-new.kr) and the API host (api.whats-new.kr) route to the same Worker;
-# src/worker.ts dispatches /api/* and /mcp to the backend and everything else
-# to Astro SSR.
+# Custom domains served by this unified Worker. The public site (whats-new.kr,
+# and whats-new.cloud) and the API host (api.whats-new.kr) all route to the same
+# Worker; src/worker.ts dispatches /api/* and /mcp to the backend and everything
+# else to Astro SSR. whats-new.cloud currently serves the same content as .kr;
+# to migrate, set the PRIMARY_HOST var (and SITE_URL) so .kr 301s to .cloud.
 routes = [
   { pattern = "whats-new.kr", custom_domain = true },
-  { pattern = "api.whats-new.kr", custom_domain = true }
+  { pattern = "api.whats-new.kr", custom_domain = true },
+  { pattern = "whats-new.cloud", custom_domain = true }
 ]
 
 # Alert webhook (Discord/Slack) — set via wrangler secret
