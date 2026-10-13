@@ -3,9 +3,10 @@ interface Props {
   title: string; date: string; content: string; csp?: string;
   target?: string; features?: string; regions?: string; status?: string;
   originalLink?: string; index?: number; articleId?: number; isFallback?: boolean;
+  openLabel?: string;
 }
 
-const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, articleId, isFallback = false } = Astro.props;
+const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, articleId, isFallback = false, openLabel = '원문 보기' } = Astro.props;
 
 let statuses: string[] = [];
 try {
@@ -29,8 +30,9 @@ const rows = [
 ---
 
 <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-  id={`article-${articleId}`}
+  id={articleId != null ? String(articleId) : undefined}
   class={`update-card${isFallback ? ' card-fallback' : ''}`}
+  aria-label={`${title} — ${openLabel}`}
   style={cardStyle}>
   <div class="update-card__inner">
     <div>
@@ -105,8 +107,8 @@ const rows = [
     document.onclick = (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); };
 
     function getCardInfo(card: HTMLElement) {
-      const id = card.id?.replace('article-', '') || '';
-      const csp = window.location.pathname.replace('/', '') || 'aws';
+      const id = card.id || '';
+      const csp = window.location.pathname.replace(/^\/|\/.*$/g, '') || 'aws';
       const permalink = `${window.location.origin}/${csp}#${card.id}`;
       return { id, permalink };
     }
