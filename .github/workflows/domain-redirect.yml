@@ -1,0 +1,143 @@
+name: Domain redirect (.kr → .cloud, manual)
+
+# Configure the whats-new.kr -> whats-new.cloud migration redirect at the EDGE
+# using a Cloudflare Single Redirect (http_request_dynamic_redirect phase), so
+# the redirect happens before the request ever reaches the Worker (faster, and
+# no Worker invocation). This replaces the former app-layer redirect in
+# src/worker.ts.
+#
+#   mode=probe   (default) read-only: find the zone, check token scope, and
+#                print the current dynamic-redirect ruleset. Changes nothing.
+#   mode=apply   create/replace a single redirect rule: any host that is
+#                whats-new.kr (NOT api.*) -> same path+query on the `target`
+#                host, using the chosen status code.
+#   mode=remove  delete the rule (revert — e.g. to undo during testing).
+#
+# status: 302 (default, temporary) while validating the migration; switch to
+# 301 only once the move is final (301 is cached permanently by browsers).
+#
+# Needs CLOUDFLARE_API_TOKEN with Zone.Transform Rules (and Zone read) on the
+# whats-new.kr zone.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'probe | apply | remove'
+        required: true
+        default: 'probe'
+        type: choice
+        options: [probe, apply, remove]
+      target:
+        description: 'Destination host'
+        required: true
+        default: 'whats-new.cloud'
+        type: string
+      status:
+        description: 'Redirect status code'
+        required: true
+        default: '302'
+        type: choice
+        options: ['302', '301']
+
+permissions:
+  contents: read
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MODE: ${{ github.event.inputs.mode }}
+      TARGET_HOST: ${{ github.event.inputs.target }}
+      STATUS_CODE: ${{ github.event.inputs.status }}
+      ZONE_NAME: whats-new.kr
+    steps:
+      - name: Configure redirect rule
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+
+          token = os.environ["CF_TOKEN"]
+          mode = (os.environ.get("MODE") or "probe").strip()
+          target = (os.environ.get("TARGET_HOST") or "whats-new.cloud").strip()
+          status = int((os.environ.get("STATUS_CODE") or "302").strip())
+          zone_name = os.environ["ZONE_NAME"]
+          api = "https://api.cloudflare.com/client/v4"
+          RULE_DESC = "Migrate whats-new.kr to whats-new.cloud (edge redirect)"
+
+          def call(method, path, body=None):
+              url = api + path
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(url, data=data, method=method,
+                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return r.status, json.loads(r.read().decode("utf-8", "replace"))
+              except urllib.error.HTTPError as e:
+                  try:
+                      return e.code, json.loads(e.read().decode("utf-8", "replace"))
+                  except Exception:
+                      return e.code, {"raw": "non-json"}
+
+          # 1) Resolve the zone id
+          c, d = call("GET", f"/zones?name={zone_name}")
+          if c != 200 or not d.get("success") or not d.get("result"):
+              print(f"Zone lookup failed: HTTP {c}: {json.dumps(d)[:400]}")
+              raise SystemExit(1)
+          zid = d["result"][0]["id"]
+          print(f"Zone: {zone_name} -> {zid}")
+
+          phase = "http_request_dynamic_redirect"
+          ep = f"/zones/{zid}/rulesets/phases/{phase}/entrypoint"
+
+          # 2) Show the current dynamic-redirect ruleset
+          c, d = call("GET", ep)
+          print(f"dynamic_redirect entrypoint: HTTP {c}")
+          existing = d.get("result", {}).get("rules", []) if c == 200 else []
+          for r in existing:
+              print(f"  - {r.get('description','')[:70]}  action={r.get('action')}")
+
+          if mode == "probe":
+              print("\nmode=probe; no changes. HTTP 200 above means the token has Transform-Rules scope.")
+              raise SystemExit(0)
+
+          # Keep every rule except our own (so apply is idempotent and remove drops it).
+          kept = []
+          for r in existing:
+              if r.get("description") == RULE_DESC:
+                  continue
+              kept.append({k: r[k] for k in ("action", "action_parameters", "expression", "description", "enabled") if k in r})
+
+          if mode == "apply":
+              # Redirect only the .kr apex/site host, never api.* (the API/MCP
+              # host must keep answering on its own hostname). Preserve path+query
+              # by targeting the same URI on the new host via a dynamic expression.
+              expr = f'(http.host eq "{zone_name}")'
+              rule = {
+                  "action": "redirect",
+                  "action_parameters": {
+                      "from_value": {
+                          "status_code": status,
+                          "target_url": {
+                              "expression": f'wildcard_replace(http.request.full_uri, "https://{zone_name}/*", "https://{target}/${{1}}")'
+                          },
+                          "preserve_query_string": True,
+                      }
+                  },
+                  "expression": expr,
+                  "description": RULE_DESC,
+                  "enabled": True,
+              }
+              kept.append(rule)
+              c, d = call("PUT", ep, {"rules": kept})
+              ok = d.get("success")
+              print(f"\napply ({zone_name} -> {target}, {status}) -> HTTP {c}: {'OK' if ok else json.dumps(d)[:600]}")
+              raise SystemExit(0 if ok else 1)
+
+          if mode == "remove":
+              c, d = call("PUT", ep, {"rules": kept})
+              ok = d.get("success")
+              print(f"\nremove rule -> HTTP {c}: {'OK' if ok else json.dumps(d)[:600]}")
+              raise SystemExit(0 if ok else 1)
+          PY

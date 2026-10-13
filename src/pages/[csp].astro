@@ -3,12 +3,12 @@ import Layout from '../layouts/Layout.astro';
 import UpdateCard from '../components/UpdateCard.astro';
 import { callBackend } from '../lib/apiClient';
 import { PROVIDERS, isProvider } from '../lib/providers';
-import { resolveLang, LANGS } from '../lib/langs';
+import { resolveActiveLang, LANGS } from '../lib/langs';
 
 const { csp } = Astro.params;
 if (!isProvider(csp)) return Astro.redirect('/');
 const provider = PROVIDERS[csp];
-const lang = resolveLang(Astro.url.searchParams.get('lang'));
+const lang = resolveActiveLang(Astro.url.searchParams, Astro.request.headers.get('cookie'));
 
 // Edge-cache the rendered HTML at Cloudflare. Content refreshes on a 1-min cron,
 // so serve a 60s edge copy (cuts repeat TTFB) and keep serving stale for 5 min

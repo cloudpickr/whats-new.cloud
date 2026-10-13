@@ -12,15 +12,6 @@
 import { handle } from '@astrojs/cloudflare/handler';
 import backend from '../worker/index.js';
 
-// PRIMARY_HOST is intentionally NOT a wrangler.toml [vars] entry (so it stays
-// unset — and the redirect stays off — by default). Declare it as an optional
-// runtime var so the migration switch can read env.PRIMARY_HOST type-safely.
-declare global {
-  interface Env {
-    PRIMARY_HOST?: string;
-  }
-}
-
 // Paths owned by the backend API. Anything else is an Astro route.
 const API_PREFIXES = ['/api/', '/mcp'];
 
@@ -43,6 +34,12 @@ function isApiRequest(pathname: string): boolean {
 // render + backend D1 query, which showed up as a variable TTFB and large
 // LCP spikes in the field. This wraps GET page renders in the Cache API so a
 // hit serves cached HTML in ~tens of ms with no D1 round-trip.
+//
+// NB: the cache is bypassed for ANY request carrying a cookie (see below), so
+// it mainly accelerates cookieless first visits and crawlers. A returning
+// visitor with a `lang` (or analytics) cookie always gets fresh SSR — which is
+// also what keeps the language cookie correct: a non-ko preference can never be
+// served a cached ko page, because the cookie forces the bypass.
 async function withEdgeCache(
   request: Request,
   ctx: ExecutionContext,
@@ -78,39 +75,8 @@ async function withEdgeCache(
   return response;
 }
 
-// Host canonicalization (domain migration switch, OFF by default).
-//
-// When the PRIMARY_HOST var is set (e.g. "whats-new.cloud"), any site request
-// arriving on a different host is redirected to the same path+query on
-// PRIMARY_HOST. API hosts (api.*) are never redirected — programmatic/MCP
-// clients must keep hitting the host they were given. With PRIMARY_HOST unset
-// (the default today) this is a no-op, so .kr and .cloud both serve directly
-// until we flip the var.
-//
-// Uses a 302 (temporary) on purpose: this is a flippable migration switch, and
-// a 301 is cached permanently by browsers — flipping it off would not bring
-// already-redirected clients back. Promote to 301 only once the move to
-// PRIMARY_HOST is final and we no longer intend to toggle it off.
-//
-// Flip procedure (no code redeploy needed, just vars):
-//   wrangler secret put PRIMARY_HOST   # or [vars] PRIMARY_HOST = "whats-new.cloud"
-//   and set SITE_URL=https://whats-new.cloud so canonical/OG/sitemap follow.
-function canonicalHostRedirect(request: Request, env: Env): Response | null {
-  const primary = String(env.PRIMARY_HOST || '').trim();
-  if (!primary) return null;
-  const url = new URL(request.url);
-  // Never redirect API/MCP hosts or the primary host itself.
-  if (url.hostname === primary || url.hostname.startsWith('api.')) return null;
-  url.hostname = primary;
-  return Response.redirect(url.toString(), 302);
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // Domain-migration redirect (no-op unless PRIMARY_HOST is set).
-    const redirect = canonicalHostRedirect(request, env);
-    if (redirect) return redirect;
-
     // Strip the internal-SSR trust header from every inbound external request
     // so it can't be forged. Only this Worker's own SSR (via apiClient's
     // in-process callBackend) is allowed to set it; see worker/index.js

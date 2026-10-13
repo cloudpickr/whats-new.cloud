@@ -30,9 +30,32 @@ export const LANGS: Record<Lang['id'], Lang> = {
 export const LANG_IDS = Object.keys(LANGS) as Lang['id'][];
 export const DEFAULT_LANG: Lang['id'] = 'ko';
 
+/** Cookie that remembers the chosen language so SSR can honor it without a
+ *  ?lang= in the URL (the query is then only for explicit/shared links). */
+export const LANG_COOKIE = 'lang';
+
 /** Narrow an arbitrary string to a supported lang id, falling back to ko. */
 export function resolveLang(raw: string | null | undefined): Lang['id'] {
   return raw === 'en' || raw === 'ja' ? raw : DEFAULT_LANG;
+}
+
+/** Read our lang cookie from a raw Cookie header. */
+export function langFromCookie(cookieHeader: string | null | undefined): Lang['id'] | null {
+  if (!cookieHeader) return null;
+  const m = cookieHeader.match(/(?:^|;\s*)lang=(ko|en|ja)(?:;|$)/);
+  return m ? (m[1] as Lang['id']) : null;
+}
+
+/**
+ * Resolve the active language for SSR, with the intended precedence:
+ *   explicit ?lang= query  >  saved `lang` cookie  >  ko default.
+ * This lets a bare URL (/aws) render the user's saved language from the cookie
+ * without putting ?lang= in the URL, while a shared ?lang= link still wins.
+ */
+export function resolveActiveLang(searchParams: URLSearchParams, cookieHeader: string | null | undefined): Lang['id'] {
+  const q = searchParams.get('lang');
+  if (q === 'en' || q === 'ja' || q === 'ko') return resolveLang(q);
+  return langFromCookie(cookieHeader) ?? DEFAULT_LANG;
 }
 
 /**

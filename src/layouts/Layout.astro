@@ -143,11 +143,11 @@ const fontPreload: Record<string, string> = Object.fromEntries(
       // to first paint, so deferring to idle time costs nothing user-visible.
       function loadGtag() {
         const script = document.createElement('script');
-        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-RQRGQJ1WQR';
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-Q4K37MHZ6X';
         script.async = true;
         script.onload = () => {
           gtag('js', new Date());
-          gtag('config', 'G-RQRGQJ1WQR', { send_page_view: false });
+          gtag('config', 'G-Q4K37MHZ6X', { send_page_view: false });
           gtag('event', 'page_view', {
             page_title: document.title,
             page_location: location.href,
@@ -270,31 +270,20 @@ const fontPreload: Record<string, string> = Object.fromEntries(
       </div>
     </footer>
     <script>
-      // Language switcher: language is a ?lang attribute (ko omits it). Changing
-      // it navigates (SSR must re-fetch the other-language data), and the choice
-      // is remembered in localStorage. On a bare visit (no ?lang=) we honor a
-      // saved non-ko preference by redirecting once; an explicit ?lang= in the
-      // URL (e.g. a shared link) always wins and is not overridden.
+      // Language switcher. The chosen language is stored in a `lang` cookie so
+      // the server (SSR) can honor it WITHOUT a ?lang= in the URL — the URL
+      // stays clean. ?lang= is only for explicit/shared links and takes
+      // precedence over the cookie (see resolveActiveLang). Selecting a language
+      // sets the cookie and navigates to the clean path (?lang stripped) so the
+      // SSR re-renders in that language and the address bar stays tidy.
       function initLangSwitcher() {
-        const LANGS = ['ko', 'en', 'ja'];
-        const url = new URL(window.location.href);
-        const urlLang = url.searchParams.get('lang');
-
-        // Honor saved preference only when the URL didn't specify a language.
-        if (!urlLang) {
-          let saved: string | null = null;
-          try { saved = localStorage.getItem('lang'); } catch { /* ignore */ }
-          if (saved && saved !== 'ko' && LANGS.includes(saved)) {
-            url.searchParams.set('lang', saved);
-            window.location.replace(url.pathname + url.search + url.hash);
-            return;
-          }
-        } else if (LANGS.includes(urlLang)) {
-          // Keep storage in sync with an explicit URL choice.
-          try { localStorage.setItem('lang', urlLang); } catch { /* ignore */ }
-        }
-
         const order = ['ko', 'en', 'ja'];
+        // If arriving via an explicit ?lang= (e.g. a shared link), remember it
+        // in the cookie so it persists as the user navigates to clean URLs.
+        const urlLang = new URL(window.location.href).searchParams.get('lang');
+        if (urlLang && order.includes(urlLang)) {
+          document.cookie = `lang=${urlLang}; path=/; max-age=31536000; SameSite=Lax; Secure`;
+        }
         const toggleEl = document.getElementById('lang-toggle');
         const dropdown = document.getElementById('lang-dropdown');
         if (!toggleEl || !dropdown) return;
@@ -321,10 +310,13 @@ const fontPreload: Record<string, string> = Object.fromEntries(
         }
         function go(next: string) {
           if (!order.includes(next)) return;
-          try { localStorage.setItem('lang', next); } catch { /* ignore */ }
+          // Persist in a cookie (1 year) so SSR renders this language on bare
+          // URLs without ?lang. SameSite=Lax is fine (same-site navigations).
+          document.cookie = `lang=${next}; path=/; max-age=31536000; SameSite=Lax; Secure`;
+          // Navigate to the CLEAN path (drop any ?lang) — the cookie carries the
+          // choice, so the URL doesn't need the param.
           const u = new URL(window.location.href);
-          if (next === 'ko') u.searchParams.delete('lang');
-          else u.searchParams.set('lang', next);
+          u.searchParams.delete('lang');
           window.location.assign(u.pathname + u.search + u.hash);
         }
 
