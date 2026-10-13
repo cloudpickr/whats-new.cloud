@@ -105,8 +105,9 @@ const h = HOME_UI[lang];
       <span class="font-medium">{h.subtitle}</span>
     </p>
     <p class="mt-5" style="font-family: 'Pretendard Variable', var(--font-family);">
-      <a href="/mcp" class="inline-flex items-center gap-1.5 text-sm font-semibold transition-colors hover:opacity-80" style="color: var(--color-primary);">
-        {h.mcpCta} →
+      <a href="/mcp" class="inline-flex items-center gap-1.5 text-sm font-semibold transition-opacity hover:opacity-80">
+        <span class="bg-clip-text text-transparent bg-gradient-to-r" style="background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));">{h.mcpCta}</span>
+        <span aria-hidden="true" style="color: var(--color-accent);">→</span>
       </a>
     </p>
   </div>
