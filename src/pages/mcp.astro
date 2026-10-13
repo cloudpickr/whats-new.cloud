@@ -37,6 +37,11 @@ type Strings = {
   toolDesc: Record<string, string>;
   setupHeading: string;
   setupIntro: string;
+  exampleHeading: string;
+  exampleIntro: string;
+  examplePromptLabel: string;
+  examplePrompt: string;
+  exampleCallLabel: string;
   langHeading: string;
   langIntro: string;
   langParamLabel: string;
@@ -68,6 +73,11 @@ const UI: Record<string, Strings> = {
     },
     setupHeading: 'MCP 클라이언트 설정',
     setupIntro: '사용하는 MCP 클라이언트(예: Claude Desktop, Cursor 등)의 설정에 아래 엔드포인트를 추가하세요.',
+    exampleHeading: '사용 예시',
+    exampleIntro: 'csp 파라미터로 특정 클라우드 공급자(AWS·GCP·Azure·OCI)의 최근 릴리스만 조회할 수 있습니다. 에이전트에게는 자연어로 요청하면 됩니다.',
+    examplePromptLabel: '자연어 프롬프트',
+    examplePrompt: '"최근 7일간 AWS 새 소식을 한국어로 10개 정리해줘"',
+    exampleCallLabel: 'JSON-RPC 호출',
     langHeading: '언어 옵션 (lang)',
     langIntro: 'search_releases·get_release 도구는 lang 파라미터로 요약의 출력 언어를 지정합니다.',
     langParamLabel: '파라미터',
@@ -98,6 +108,11 @@ const UI: Record<string, Strings> = {
     },
     setupHeading: 'MCP client setup',
     setupIntro: 'Add the endpoint below to your MCP client configuration (e.g. Claude Desktop, Cursor).',
+    exampleHeading: 'Example',
+    exampleIntro: 'Use the csp parameter to get recent releases from a single cloud provider (AWS, GCP, Azure, OCI). With an agent, just ask in natural language.',
+    examplePromptLabel: 'Natural-language prompt',
+    examplePrompt: '"Summarize the last 7 days of AWS announcements, 10 items in English."',
+    exampleCallLabel: 'JSON-RPC call',
     langHeading: 'Language option (lang)',
     langIntro: 'The search_releases and get_release tools take a lang parameter that sets the summary output language.',
     langParamLabel: 'Parameter',
@@ -128,6 +143,11 @@ const UI: Record<string, Strings> = {
     },
     setupHeading: 'MCP クライアント設定',
     setupIntro: 'お使いの MCP クライアント（Claude Desktop、Cursor など）の設定に、以下のエンドポイントを追加してください。',
+    exampleHeading: '使用例',
+    exampleIntro: 'csp パラメータで特定のクラウドプロバイダー（AWS・GCP・Azure・OCI）の最近のリリースだけを取得できます。エージェントには自然言語で依頼できます。',
+    examplePromptLabel: '自然言語プロンプト',
+    examplePrompt: '「直近7日間の AWS の新着情報を日本語で10件まとめて」',
+    exampleCallLabel: 'JSON-RPC 呼び出し',
     langHeading: '言語オプション (lang)',
     langIntro: 'search_releases・get_release ツールは lang パラメータで要約の出力言語を指定します。',
     langParamLabel: 'パラメータ',
@@ -145,7 +165,23 @@ const UI: Record<string, Strings> = {
 const t = UI[lang];
 
 const configSnippet = JSON.stringify(
-  { mcpServers: { 'whats-new-cloud': { url: MCP_ENDPOINT } } },
+  { mcpServers: { 'cloud-whats-new': { url: MCP_ENDPOINT } } },
+  null,
+  2,
+);
+
+// A concrete tools/call example — searching one vendor's (CSP) recent releases.
+// Shown so users see the csp filter in action (the "releases by vendor" option).
+const exampleCall = JSON.stringify(
+  {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'search_releases',
+      arguments: { csp: 'aws', lang: 'ko', days: 7, limit: 10 },
+    },
+  },
   null,
   2,
 );
@@ -204,6 +240,16 @@ const structuredData = {
       <h2 class="text-lg font-extrabold tracking-tight mb-1" style="color: var(--color-text-primary);">{t.setupHeading}</h2>
       <p class="text-sm leading-relaxed mb-3" style="color: var(--color-text-secondary);">{t.setupIntro}</p>
       <pre class="overflow-x-auto px-4 py-3 rounded-lg text-xs sm:text-sm font-mono leading-relaxed" style="background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-primary);"><code>{configSnippet}</code></pre>
+    </section>
+
+    <!-- Example card: vendor (csp) filtered search -->
+    <section class="p-5 sm:p-6 rounded-2xl" style="background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--card-shadow);">
+      <h2 class="text-lg font-extrabold tracking-tight mb-1" style="color: var(--color-text-primary);">{t.exampleHeading}</h2>
+      <p class="text-sm leading-relaxed mb-4" style="color: var(--color-text-secondary);">{t.exampleIntro}</p>
+      <p class="text-xs font-bold uppercase tracking-wide mb-1.5" style="color: var(--color-text-secondary);">{t.examplePromptLabel}</p>
+      <p class="text-sm leading-relaxed mb-4 px-3 py-2 rounded-lg" style="background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-primary);">{t.examplePrompt}</p>
+      <p class="text-xs font-bold uppercase tracking-wide mb-1.5" style="color: var(--color-text-secondary);">{t.exampleCallLabel}</p>
+      <pre class="overflow-x-auto px-4 py-3 rounded-lg text-xs sm:text-sm font-mono leading-relaxed" style="background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-primary);"><code>{exampleCall}</code></pre>
     </section>
 
     <!-- Tools card -->
