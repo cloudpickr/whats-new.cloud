@@ -136,6 +136,8 @@ const configSnippet = JSON.stringify(
 
 // A concrete tools/call example — searching one vendor's (CSP) recent releases.
 // Shown so users see the csp filter in action (the "releases by vendor" option).
+// lang mirrors the page language so the JSON matches the prompt above it
+// (en page says "in English" and shows lang:"en", etc.).
 const exampleCall = JSON.stringify(
   {
     jsonrpc: '2.0',
@@ -143,7 +145,7 @@ const exampleCall = JSON.stringify(
     method: 'tools/call',
     params: {
       name: 'search_releases',
-      arguments: { csp: 'aws', lang: 'ko', days: 7, limit: 10 },
+      arguments: { csp: 'aws', lang, days: 7, limit: 10 },
     },
   },
   null,
