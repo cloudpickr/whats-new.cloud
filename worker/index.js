@@ -1300,16 +1300,13 @@ function assessTranslationQuality(record, row, lang) {
     if (invented.length) reasons.push('invented-acronym');
   }
 
-  // Status validation: beta/preview must have evidence in description
+  // Status validation: preview must have evidence in description.
+  // (There is no 'beta' status anymore — see LANG_PROFILES — so no beta check.)
   const statusStr = JSON.stringify(record.status || '').toLowerCase();
   const descLower = String(row.description_en || '').toLowerCase();
-  const betaKeyword = profile.statusMap.beta.toLowerCase();
   const previewKeyword = profile.statusMap.preview.toLowerCase();
 
-  if (statusStr.includes(betaKeyword) && !descLower.includes('beta') && !descLower.includes('베타') && !descLower.includes('ベータ')) {
-    reasons.push('status-beta-no-evidence');
-  }
-  if (statusStr.includes(previewKeyword) && !descLower.includes('preview') && !descLower.includes('미리보기') && !descLower.includes('プレビュー') && !row.title_en.toLowerCase().includes('preview')) {
+  if (statusStr.includes(previewKeyword) && !descLower.includes('preview') && !descLower.includes('미리보기') && !descLower.includes('プレビュー') && !String(row.title_en || '').toLowerCase().includes('preview')) {
     reasons.push('status-preview-no-evidence');
   }
 
