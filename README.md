@@ -55,7 +55,7 @@ Cloudflare Pages (Astro SSR)
 |-----------|------|
 | `POST /mcp` | MCP JSON-RPC 2.0 엔드포인트 (기본 요약 조회는 공개, 영문 원문 조회는 에이전트 인증 필요) |
 | `GET /api/articles` | 기사 조회 — whats-new.cloud SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
-| `GET /api/stats` | 번역/검수/큐 상태 모니터링 (`models` 필드에 현재 가동 중인 번역/검수 모델 ID 포함) |
+| `GET /api/stats` | 번역/검수/큐 상태 모니터링 (`models` 필드에 현재 가동 중인 번역/검수 모델 ID 포함, 에이전트 전용 — `mcp` 타입 토큰 인증 필수) |
 | `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 (관리자 전용) |
 | `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리, 관리자 전용) |
 | `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 (관리자 전용) |
@@ -71,7 +71,9 @@ Cloudflare Pages (Astro SSR)
 |------|------|----------|
 | `search_releases` | 키워드·CSP·기간으로 릴리스 노트 검색 (ko/en 요약 및 영문 원문 지원) | `query`, `csp`, `lang` (`ko`\|`en`), `days`, `start_date`, `end_date`, `limit`, `format` (`summary`\|`source`) |
 | `get_release` | article ID로 개별 릴리스 노트 조회 (ko/en 요약 및 영문 원문 지원) | `id` (필수), `lang` (`ko`\|`en`), `format` (`summary`\|`source`) |
-| `get_stats` | 번역/검수 파이프라인 현황 및 큐 상태 조회 | - |
+| `get_stats` | 번역/검수 파이프라인 현황 및 큐 상태 조회 (에이전트 전용, `mcp` 타입 토큰 인증 필수) | - |
+
+- **인증된 호출에만 노출**: `get_stats`와 각 도구의 `format="source"` 인자는 유효한 `mcp` 타입 토큰이 있는 호출에만 `tools/list`에 노출됩니다. 미인증 호출에는 `search_releases`·`get_release`의 요약 조회만 보이고, `get_stats`는 목록에서 숨겨집니다.
 
 - **요약 조회 (`format="summary"`, 기본값)**: 한국어(`ko`) 또는 영어(`en`) AI 요약 데이터를 반환하며, 별도 인증 없이 누구나 자유롭게 호출할 수 있습니다.
 - **영문 원문 조회 (`format="source"`)**: 벤더 영문 원문(수집된 `articles` 원본)을 반환합니다. `search_releases`와 `get_release` 둘 다 지원하며, 번역 파이프라인과 독립적이라 RSS 수집 직후 즉시 조회가 가능합니다. 단, 에이전트 전용 기능으로 `Authorization: Bearer <mcp 타입 토큰>` 인증이 필수이며, 미인증 시 JSON-RPC 에러 `-32001`로 거부됩니다.
@@ -81,12 +83,14 @@ Cloudflare Pages (Astro SSR)
 
 API 접근은 보안 및 용도에 따라 4개 계층으로 구분됩니다.
 
-1. **공개 (인증 불필요)**: `GET /api/stats`, `POST /mcp`의 기본 요약 조회 (`search_releases`, `get_release`, `get_stats` 및 `initialize`, `tools/list`)
-   - 한국어·영어 AI 요약, `GET /api/stats`, MCP `get_stats`를 인증 없이 조회할 수 있습니다.
-2. **에이전트 전용 (인증 필요)**: `POST /mcp`의 `format="source"` (영문 원문 조회)
-   - 벤더 영문 원문 데이터를 반환합니다.
-   - 요청 헤더에 `Authorization: Bearer <token>` (`mcp` 타입 토큰)이 필요하며, 토큰이 없거나 유효하지 않으면 JSON-RPC 에러 `-32001`을 반환합니다.
-   - 번역/검수 파이프라인과 독립적이므로 RSS 수집 직후 바로 확인할 수 있습니다.
+1. **공개 (인증 불필요)**: `POST /mcp`의 기본 요약 조회 (`search_releases`, `get_release` 및 `initialize`, `tools/list`)
+   - 한국어·영어·일본어 AI 요약을 인증 없이 조회할 수 있습니다.
+   - `GET /api/stats`와 MCP `get_stats`는 공개가 아닙니다. 파이프라인 내부 지표와 가동 모델 ID를 노출하므로 아래 2번(에이전트 전용) 계층에 속합니다.
+2. **에이전트 전용 (인증 필요)**: `POST /mcp`의 `format="source"` (영문 원문 조회), MCP `get_stats`, `GET /api/stats`
+   - 벤더 영문 원문 데이터와 번역/검수 파이프라인 내부 지표(백로그, 큐, stale job, 가동 중인 모델 ID)를 반환합니다.
+   - 요청 헤더에 `Authorization: Bearer <token>` (`mcp` 타입 토큰)이 필요하며, 토큰이 없거나 유효하지 않으면 MCP는 JSON-RPC 에러 `-32001`, `GET /api/stats`는 401(키 링 미설정 시 503)로 거부합니다.
+   - `format="source"`는 번역/검수 파이프라인과 독립적이므로 RSS 수집 직후 바로 확인할 수 있습니다.
+   - `get_stats`와 `format="source"` 인자는 인증된 호출의 `tools/list`에만 노출되고, 미인증 호출에는 숨겨집니다.
 3. **사이트 SSR 전용**: `GET /api/articles`
    - whats-new.cloud 웹 프론트엔드의 서버사이드 렌더링(Astro SSR) 전용 엔드포인트입니다 (`site` 타입 토큰 필요).
    - 일반 프로그램이나 AI 에이전트는 본 엔드포인트 대신 `POST /mcp`를 사용해야 합니다.
