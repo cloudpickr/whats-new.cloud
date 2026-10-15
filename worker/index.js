@@ -58,6 +58,19 @@ function isSchemaUnsupportedError(err) {
   return /json schema|json_schema|response_format|structured output/.test(m);
 }
 
+// Transient infrastructure blips that reach the queue consumer — D1 dropping a
+// connection ("Network connection lost") or Workers surfacing an opaque
+// "Unknown internal error" — are expected operational noise, not a code defect.
+// The queue SHOULD still retry the message (the work genuinely needs redoing),
+// but logging these at console.error auto-files a fresh Cloudflare observability
+// issue on every attempt. Classify them so the queue catch can retry quietly
+// (console.warn) the same way fetchRSS quiets a transient vendor feed blip and
+// runAIWithFallback quiets a transient inference hiccup.
+function isTransientInfraError(err) {
+  const m = ((err && err.message) || String(err || '')).toLowerCase();
+  return /network connection lost|unknown internal error|d1_error|connection (?:reset|closed|lost)|storage.*(?:overloaded|unavailable)|internal error occurred/.test(m);
+}
+
 // Run a Workers AI model, falling back to a different model once if the first
 // call throws a transient inference error. Keeps a single bad backend from
 // turning into a stuck/erroring queue job.
@@ -2001,6 +2014,16 @@ export default {
           console.warn(`queue translate dropped for article ${articleId} [${lang}]: parent article gone (${emsg})`);
           await touchTranslationJob(env, articleId, lang, 'article_deleted').catch(() => {});
           msg.ack();
+          continue;
+        }
+        // Transient infra blip (D1 "Network connection lost", opaque "Unknown
+        // internal error"): retry like any other failure, but log at warn so a
+        // momentary backend hiccup doesn't auto-file a Cloudflare observability
+        // issue on every attempt. A persistent outage still surfaces via the
+        // "no new articles" alert and the retry exhaustion.
+        if (isTransientInfraError(e)) {
+          console.warn(`queue translate transient error for article ${articleId} [${lang}] (retrying):`, emsg);
+          msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts || 0) });
           continue;
         }
         console.error(`queue translate error for article ${articleId} [${lang}]:`, emsg);
