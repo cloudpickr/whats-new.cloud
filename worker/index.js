@@ -46,6 +46,18 @@ function isTransientInferenceError(err) {
   return /triton|inference|timeout|capacity|unavailable|overloaded|5\d\d|aborted|network/.test(m);
 }
 
+// Some Workers AI text-generation models reject the `response_format:
+// json_schema` structured-output option with "This model doesn't support JSON
+// Schema." A runtime TRANSLATION_MODEL override (getTranslationModel only
+// checks the '@cf/' prefix) can therefore break the translation call even
+// though the model itself works fine. This is NOT a transient error, so
+// runAIWithFallback rethrows it and the queue job retries forever against the
+// same unsupported model, re-filing the same observability issue each attempt.
+function isSchemaUnsupportedError(err) {
+  const m = ((err && err.message) || String(err || '')).toLowerCase();
+  return /json schema|json_schema|response_format|structured output/.test(m);
+}
+
 // Run a Workers AI model, falling back to a different model once if the first
 // call throws a transient inference error. Keeps a single bad backend from
 // turning into a stuck/erroring queue job.
@@ -1574,6 +1586,18 @@ async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY
     messages: [{ role: 'system', content: sysPromptWithHint }, ...fewShot, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
     max_tokens: 4096, temperature: 0.1,
+  }).catch(async (err) => {
+    // The configured model doesn't support json_schema structured output.
+    // Retry once without response_format — the system prompt already asks for
+    // JSON and parseAIResponse() parses free-form JSON (this is exactly how the
+    // review call at reviewTranslationQualityWithAI works, schema-less). This
+    // keeps a schema-incapable TRANSLATION_MODEL from failing every job forever.
+    if (!isSchemaUnsupportedError(err)) throw err;
+    console.warn(`model ${model} rejected JSON schema; retrying translation without response_format (${(err && err.message) || err})`);
+    return await runAIWithFallback(env, model, {
+      messages: [{ role: 'system', content: sysPromptWithHint }, ...fewShot, { role: 'user', content: userMsg }],
+      max_tokens: 4096, temperature: 0.1,
+    });
   });
   const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return null;
