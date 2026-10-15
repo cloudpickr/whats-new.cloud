@@ -773,7 +773,16 @@ async function fetchRSS(env) {
   const jobs = [];
 
   const feedPromises = Object.entries(RSS_FEEDS).map(async ([csp, url]) => {
-    const resp = await fetch(url, { headers: { 'User-Agent': 'CloudWhatsNew/2.0' }, redirect: 'follow' });
+    // Fetch with one short retry: upstream vendor feeds (notably Microsoft's
+    // Azure endpoint) intermittently 403/5xx a Worker request from Cloudflare
+    // IPs, then succeed moments later. One retry absorbs the transient blip so
+    // it doesn't surface as a logged error / auto-filed observability issue.
+    let resp;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      resp = await fetch(url, { headers: { 'User-Agent': 'CloudWhatsNew/2.0' }, redirect: 'follow' });
+      if (resp.ok) break;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+    }
     if (!resp.ok) throw new Error(`HTTP status ${resp.status}`);
     const xml = await resp.text();
     if (!xml.includes('<')) throw new Error('Invalid XML');
@@ -790,7 +799,12 @@ async function fetchRSS(env) {
     if (res.status === 'fulfilled') {
       allItems.push(...res.value.items);
     } else {
-      console.error(`${csp} fetch error:`, res.reason?.message || res.reason);
+      // A single upstream feed failing (after the retry above) is expected
+      // operational noise — other feeds still ingest via allSettled. Log as a
+      // warning, not an error, so a transient vendor 403 doesn't auto-file a
+      // Workers observability issue. A persistent outage still shows up via
+      // the "3h no new articles" alert below.
+      console.warn(`${csp} fetch skipped:`, res.reason?.message || res.reason);
     }
   }
 
