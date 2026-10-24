@@ -68,7 +68,7 @@ function isSchemaUnsupportedError(err) {
 // runAIWithFallback quiets a transient inference hiccup.
 function isTransientInfraError(err) {
   const m = ((err && err.message) || String(err || '')).toLowerCase();
-  return /network connection lost|unknown internal error|d1_error|connection (?:reset|closed|lost)|storage.*(?:overloaded|unavailable)|internal error occurred/.test(m);
+  return /network connection lost|unknown internal error|d1_error|sqlite_nomem|out of memory|connection (?:reset|closed|lost)|storage.*(?:overloaded|unavailable)|internal error occurred|internal error; reference/.test(m);
 }
 
 // Run a Workers AI model, falling back to a different model once if the first
@@ -1162,7 +1162,17 @@ function hasDanglingTitleFragment(title) {
 
 // Deterministic post-processing: fix common LLM issues without another AI call
 function applyDeterministicFixes(record, row, lang) {
-  let { title, summary, target, features, regions, status } = record;
+  // Coerce every text field to a string up front. On the ja schema-less fallback
+  // path the LLM returns free-form JSON that may omit a field or return a
+  // non-string (null/number/object); the stripMd/fixProducts/features helpers
+  // below call .replace()/.split() directly and would otherwise throw
+  // "Cannot read properties of undefined".
+  let title = String(record.title ?? '');
+  let summary = String(record.summary ?? '');
+  let target = String(record.target ?? '');
+  let features = String(record.features ?? '');
+  let regions = record.regions ?? '';
+  let status = record.status ?? '';
   const entities = extractEntities(row.title_en, (row.description_en || '').slice(0, 800));
   const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
 
@@ -1343,9 +1353,9 @@ function assessTranslationQuality(record, row, lang) {
   // (There is no 'beta' status anymore — see LANG_PROFILES — so no beta check.)
   const statusStr = JSON.stringify(record.status || '').toLowerCase();
   const descLower = String(row.description_en || '').toLowerCase();
-  const previewKeyword = profile.statusMap.preview.toLowerCase();
+  const previewKeyword = String(profile.statusMap?.preview || '').toLowerCase();
 
-  if (statusStr.includes(previewKeyword) && !descLower.includes('preview') && !descLower.includes('미리보기') && !descLower.includes('プレビュー') && !String(row.title_en || '').toLowerCase().includes('preview')) {
+  if (previewKeyword && statusStr.includes(previewKeyword) && !descLower.includes('preview') && !descLower.includes('미리보기') && !descLower.includes('プレビュー') && !String(row.title_en || '').toLowerCase().includes('preview')) {
     reasons.push('status-preview-no-evidence');
   }
 
@@ -1426,7 +1436,7 @@ If you cannot find any real errors after thorough review, output: {"pass":true}`
 function applyReviewEdits(parsed, record, row, lang) {
   if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
   const fixed = { ...record };
-  if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (parsed.title) fixed.title = String(parsed.title).replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
   if (parsed.summary) fixed.summary = String(parsed.summary).replace(/\s+/g, ' ').trim();
   if (parsed.status) {
     let s = parsed.status;
@@ -1434,7 +1444,7 @@ function applyReviewEdits(parsed, record, row, lang) {
     fixed.status = JSON.stringify(Array.isArray(s) ? s : [s]);
   }
   if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp, lang);
-  if (parsed.target) fixed.target = parsed.target;
+  if (parsed.target) fixed.target = String(parsed.target);
   if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
   return { pass: true, reasons: ['reviewer-applied-edit'], record: fixed };
 }
@@ -1614,7 +1624,7 @@ async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY
   });
   const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return null;
-  let cleanTitle = parsed.title
+  let cleanTitle = String(parsed.title)
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   const feat = normalizeShortList(parsed.features).join(', ');
@@ -1622,8 +1632,13 @@ async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY
   
   const VALID_STATUS = profile.statuses;
   const rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
+  // The LLM (especially on the ja schema-less fallback path) may return status
+  // elements that are not strings (null, numbers, nested objects). Coerce every
+  // element to a string before calling .includes() so a malformed status field
+  // does not throw "Cannot read properties of undefined (reading 'includes')".
   const cleanStatus = [...new Set(rawStatus.flatMap(s => {
-    for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; }
+    const str = String(s ?? '');
+    for (const v of VALID_STATUS) { if (str.includes(v)) return [v]; }
     return [];
   }))];
   const stat = JSON.stringify(cleanStatus.length ? cleanStatus : [VALID_STATUS[0]]);
@@ -1857,6 +1872,7 @@ export {
 
 export default {
   async scheduled(event, env, ctx) {
+    try {
     await ensureTranslationJobStateTable(env);
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const minute = new Date().getMinutes();
@@ -1926,6 +1942,21 @@ export default {
           }).catch(() => {});
         }
       }
+    }
+    } catch (e) {
+      const emsg = (e && e.message) || String(e);
+      // A transient D1/infra blip during a cron tick (D1 surfacing SQLITE_NOMEM
+      // "out of memory", an opaque "internal error; reference = *", or a dropped
+      // connection from D1DatabaseSession._sendOrThrow) is operational noise, not
+      // a code defect. Swallow it at warn so a momentary backend hiccup doesn't
+      // auto-file a Cloudflare observability issue every cron tick; the next tick
+      // retries, and a persistent outage still surfaces via the no-new-articles
+      // alert. Anything else is a real defect — re-throw so it stays visible.
+      if (isTransientInfraError(e)) {
+        console.warn('scheduled cron transient infra error (will retry next tick):', emsg);
+        return;
+      }
+      throw e;
     }
   },
   async queue(batch, env, ctx) {
@@ -2034,7 +2065,17 @@ export default {
   async fetch(request, env) {
     await ensureTranslationJobStateTable(env);
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
-    const url = new URL(request.url);
+    // A malformed request URL (bad percent-encoding like a bare "%" or "%zz",
+    // typically from a scanner/bot probing the origin) makes `new URL()` throw
+    // "Invalid URL encoding". That is client garbage, not a code defect, so
+    // answer 400 instead of letting it bubble up as an uncaught error that
+    // auto-files a Cloudflare observability issue on every probe.
+    let url;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
     const path = url.pathname;
     let authMode = getAuthMode(env);
     const corsOrigin = getCorsOrigin(request, env);
