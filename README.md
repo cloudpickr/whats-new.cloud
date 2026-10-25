@@ -1,6 +1,6 @@
 # ☁️ What's New in Cloud
 
-Amazon Web Services · Google Cloud · Microsoft Azure · Oracle Cloud 클라우드 최신 업데이트를 한국어로 요약합니다.
+Amazon Web Services · Google Cloud · Microsoft Azure · Oracle Cloud 클라우드 최신 업데이트를 한국어·영어·일본어로 요약합니다.
 
 **Live**: https://whats-new.cloud
 
@@ -11,14 +11,16 @@ Cloudflare Workers (Cron, 매분)
   → 15분마다: RSS 수집 + 30일 지난 기사 삭제 + stale job 정리
   → 5분마다: 미검수 건 + 어색한 한국어 재다듬기 큐잉
   → 신규 기사는 수집 즉시 번역 큐잉, 누락분은 15분 블록에서 재큐잉
-  → Queue consumer: 번역 → 품질 검수 → 저장
+  → Queue consumer: 번역(ko/en/ja) → 품질 검수 → 저장
+  → OpenAI·IBM은 원문만 수집(번역 없음), MCP format="source"로만 조회
   → 장시간 무수집 시 Alert webhook (Discord/Slack)
 
 Cloudflare Pages (Astro SSR)
-  → /           통합 대시보드 (3단 컬럼)
+  → /           통합 대시보드 (4단 컬럼)
   → /aws        AWS Cloudscape 테마
   → /gcp        Google Cloud Material 테마
   → /azure      Microsoft Azure Fluent 테마
+  → /oci        Oracle Cloud Infrastructure 테마
 ```
 
 번역/검수 모델은 런타임에 교체 가능하므로(아래 "번역 모델 자동 평가" 참고) 현재 가동 중인
@@ -26,10 +28,12 @@ Cloudflare Pages (Astro SSR)
 
 ## 번역 파이프라인
 
+대상 언어는 한국어(ko)·영어(en)·일본어(ja)이며, 각 언어 프로파일에 맞춰 동일한 단계를 거칩니다.
+
 1. **번역**: 본문 요약 → 제목 도출 → 상태/대상/기능/리전 추출
 2. **검수**: 제목/상태/리전 등 필드별 교차 검증, 오류 시 수정
-3. **품질 게이트**: CJK 오염, 마크다운 잔재, 제목 잘림 등 자동 감지 → 재시도
-4. **AI 품질 리뷰**: 제목 완성도, 자연스러운 한국어, 리전 표기 일관성 등 최종 검수
+3. **품질 게이트**: CJK 오염(일본어 제외), 마크다운 잔재, 제목 잘림 등 자동 감지 → 재시도
+4. **AI 품질 리뷰**: 제목 완성도, 자연스러운 번역, 리전 표기 일관성 등 최종 검수
 
 ## 비용: $0
 
@@ -43,11 +47,16 @@ Cloudflare Pages (Astro SSR)
 
 ## RSS 소스
 
-| CSP | 피드 | 형식 |
-|-----|------|------|
-| AWS | https://aws.amazon.com/about-aws/whats-new/recent/feed/ | RSS 2.0 |
-| GCP | https://docs.cloud.google.com/feeds/gcp-release-notes.xml | Atom |
-| Azure | https://www.microsoft.com/releasecommunications/api/v2/azure/rss | RSS 2.0 |
+| CSP | 피드 | 형식 | 번역 |
+|-----|------|------|------|
+| AWS | https://aws.amazon.com/about-aws/whats-new/recent/feed/ | RSS 2.0 | ko/en/ja |
+| GCP | https://docs.cloud.google.com/feeds/gcp-release-notes.xml | Atom | ko/en/ja |
+| Azure | https://www.microsoft.com/releasecommunications/api/v2/azure/rss | RSS 2.0 | ko/en/ja |
+| OCI | https://docs.oracle.com/en-us/iaas/releasenotes/feed | Atom | ko/en/ja |
+| OpenAI | https://openai.com/news/rss.xml | RSS 2.0 | 원문 전용 |
+| IBM | https://cloud.ibm.com/status/api/notifications/feed.rss | RSS 2.0 | 원문 전용 |
+
+OpenAI·IBM은 원문만 수집되어 `articles`에 저장되며(번역 큐잉 없음), MCP `format="source"`로만 조회합니다. 전용 페이지도 두지 않아 요약 파이프라인 비용이 발생하지 않습니다.
 
 ## API
 
@@ -108,9 +117,10 @@ API 접근은 보안 및 용도에 따라 4개 계층으로 구분됩니다.
 | /aws | Cloudscape | Amazon Ember | Noto Sans KR |
 | /gcp | Material 3 | Google Sans | Noto Sans KR |
 | /azure | Fluent UI 2 | Segoe UI | Noto Sans KR |
+| /oci | Oracle Redwood | Oracle Sans | Noto Sans KR |
 
 - 다크모드 지원 (시스템 설정 연동 + 수동 토글)
-- CSP별 페이지: 상태 필터 (정식 출시/미리보기/베타/지원 종료), 텍스트 검색, 카드 하이라이트
+- CSP별 페이지: 상태 필터 (정식 출시/미리보기/지원 종료), 텍스트 검색, 카드 하이라이트
 - 카드 우클릭/롱프레스: 퍼머링크·ID 복사
 - OG image (PNG 1200×630), JSON-LD 구조화 데이터
 - 동적 sitemap (`lastmod` API 연동)
