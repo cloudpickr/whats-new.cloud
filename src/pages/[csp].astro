@@ -34,9 +34,9 @@ try {
 // the target language (worker LANG_PROFILES), so the filter must match the
 // language being shown. Each status maps to a stable class for styling.
 const STATUS_BY_LANG: Record<string, { order: string[]; cls: Record<string, string> }> = {
-  ko: { order: ['정식 출시', '미리보기', '베타', '지원 종료'], cls: { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired' } },
-  en: { order: ['General Availability', 'Preview', 'Beta', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'Beta': 'beta', 'End of Support': 'retired' } },
-  ja: { order: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'ベータ': 'beta', 'サポート終了': 'retired' } },
+  ko: { order: ['정식 출시', '미리보기', '지원 종료'], cls: { '정식 출시': 'ga', '미리보기': 'preview', '지원 종료': 'retired' } },
+  en: { order: ['General Availability', 'Preview', 'End of Support'], cls: { 'General Availability': 'ga', 'Preview': 'preview', 'End of Support': 'retired' } },
+  ja: { order: ['一般提供', 'プレビュー', 'サポート終了'], cls: { '一般提供': 'ga', 'プレビュー': 'preview', 'サポート終了': 'retired' } },
 };
 const UI: Record<string, { updates: string; lastUpdated: string; search: string; shareFilter: string; linkCopied: string; openLabel: string; kv: { target: string; features: string; regions: string }; feedDesc: (name: string, url: string) => string; empty: string; noResults: string }> = {
   ko: { updates: '업데이트', lastUpdated: '최종 업데이트', search: '검색...', shareFilter: '현재 필터 링크 복사', linkCopied: '링크가 복사되었습니다', openLabel: '원문 보기', kv: { target: '대상', features: '기능', regions: '리전' }, feedDesc: (n, u) => `${n} <a href="${u}" target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.`, empty: '업데이트가 없습니다.', noResults: '검색 결과가 없습니다.' },
