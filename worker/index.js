@@ -886,9 +886,8 @@ async function fetchRSS(env) {
   }
 
   const queued = await enqueueTranslationJobs(env, jobs);
-  if (jobs.length > 0 && queued === 0) {
-    console.error(`Failed to enqueue ${jobs.length} translation jobs`);
-  }
+  // Zero is valid when every candidate is already localized or claimed by
+  // another producer. Actual enqueue failures reject instead of returning zero.
   return { newArticles: totalNew, queued };
 }
 
@@ -1528,7 +1527,8 @@ async function touchTranslationJob(env, articleId, lang, reason) {
 }
 
 async function enqueueTranslationJobs(env, jobs, options = {}) {
-  if (!env.TRANSLATION_QUEUE || !jobs.length) return 0;
+  if (!jobs.length) return 0;
+  if (!env.TRANSLATION_QUEUE) throw new Error('TRANSLATION_QUEUE binding is required to enqueue translation jobs');
   const skipClaim = !!options.skipClaim;
   const candidateJobs = skipClaim ? jobs : await claimTranslationJobs(env, jobs);
   let queued = 0;
@@ -1844,7 +1844,7 @@ async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE
   return enqueueTranslationJobs(env, jobs, { skipClaim: true });
 }
 
-export { parseRSS };
+export { parseRSS, fetchRSS };
 
 // Pure translation-pipeline pieces reused by the offline model evaluation
 // (scripts/model-eval.mjs) so it measures the SAME prompt, few-shot, JSON
