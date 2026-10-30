@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@astrojs/check": "^0.9.12",
-    "@astrojs/cloudflare": "^14.4.2",
+    "@astrojs/cloudflare": "^14.4.3",
     "astro": "^7.4.1",
     "typescript": "^5.7.2"
   },
@@ -21,6 +21,6 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^4.3.3",
-    "wrangler": "^4.152.0"
+    "wrangler": "^4.156.0"
   }
 }
