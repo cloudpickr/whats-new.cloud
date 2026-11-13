@@ -41,4 +41,31 @@ describe('Korean few-shots match the translation rules', () => {
       assert.equal(card.summary.split(/(?<=[.!?。])\s+/).length <= 2, true);
     }
   });
+
+  test('a worldwide region claim appears only when the source states that scope', () => {
+    const worldwide = /모든(?:\s+AWS|\s+Azure)?(?:\s+퍼블릭)?\s+리전|all regions/i;
+    const sourceSaysAll = /all (?:aws |public azure |azure )?regions/i;
+    for (const { user, assistant } of pairs) {
+      const card = JSON.parse(assistant.content);
+      const claimed = `${card.regions} ${card.summary} ${card.title}`;
+      if (!worldwide.test(claimed)) continue;
+      assert.match(user.content, sourceSaysAll, claimed);
+    }
+  });
+
+  test('Composer names only the source region and states the creation limit once', () => {
+    const composer = pairs.find((pair) => pair.user.content.includes('Cloud Composer'));
+    const card = JSON.parse(composer.assistant.content);
+    const items = card.features.split(',').map((item) => item.trim()).filter(Boolean);
+    assert.equal(card.regions, 'australia-southeast2');
+    assert.equal(items.filter((item) => /생성/.test(item)).length, 1);
+    assert.equal(new Set(items).size, items.length);
+  });
+
+  test('Cosmos does not name a region the source never gives', () => {
+    const cosmos = pairs.find((pair) => pair.user.content.includes('Cosmos'));
+    const card = JSON.parse(cosmos.assistant.content);
+    assert.equal(card.regions, '');
+    assert.equal(/리전|region/i.test(`${card.summary} ${card.features}`), false);
+  });
 });
