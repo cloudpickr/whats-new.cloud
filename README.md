@@ -71,6 +71,7 @@ OpenAI·IBM은 원문만 수집되어 `articles`에 저장되며(번역 큐잉 �
 | `POST /api/pipeline?action=retranslate&id=N` | 특정 기사 재번역 (`&mode=review`로 검수만, `&hint=...` 지원, 관리자 전용) |
 | `POST /api/pipeline?action=fix-bad` | 품질 미달 기사 일괄 재번역 (관리자 전용) |
 | `POST /api/pipeline?action=refresh-ko` | 어색한 한국어를 영문 원본 기준으로 재번역 (`limit` 최대 25, 관리자 전용) |
+| `POST /api/pipeline?action=quality-refresh` | 검수된 한국어를 품질 게이트로 보고, 제목 길이 외의 이유가 있으면 재번역 (`limit`은 검사 건수, 최대 50, 관리자 전용) |
 
 ### MCP 도구
 
@@ -155,6 +156,8 @@ GitHub Actions (`deploy.yml`, `push → main`):
 - Pages 프로젝트(`cloud-whats-new`)에 `SITE_API_TOKEN` (`wrangler pages secret put SITE_API_TOKEN`) — `API_KEY_RING`의 `type: "site"` 토큰과 같은 값. Astro SSR(`index.astro`, `[csp].astro`, `sitemap.xml.ts`)이 `/api/articles` 호출 시 이 값을 `Authorization: Bearer`로 보냄
 
 운영 변수: `AUTH_ENFORCEMENT`, `SITE_API_ENFORCEMENT`, `TRUSTED_IP_BYPASS`, `BACKLOG_QUEUE_BATCH_SIZE`, `ALERT_WEBHOOK_URL`, `TRANSLATION_MODEL`, `REVIEW_MODEL`, `FLUENT_REFRESH_DAILY_CAP`
+
+이미 검수된 한국어는 5분마다 품질 게이트로 다시 봅니다. 이유가 없거나 `title-too-long`뿐이면 카드를 유지합니다. 그 외 이유가 있으면 재번역을 한 번 큐에 넣고, 새 문장이 게이트를 통과할 때만 바꿉니다. 실패하면 기존 문장을 남기고 `GET /api/stats`의 `quality_refresh.failed_articles`에 올립니다. 이 재번역은 fluent 갱신과 `FLUENT_REFRESH_DAILY_CAP`(기본 100)을 같이 씁니다. 실패한 카드는 자동으로 다시 돌지 않으며, `action=retranslate&id=N`으로 사람이 다시 넣습니다.
 
 `AUTH_ENFORCEMENT`와 `SITE_API_ENFORCEMENT`의 기본값은 `on`입니다. `TRUSTED_IP_BYPASS`는 `off`이며, 값이 `on`이어도 Bearer 인증을 대신하지 않습니다. `ALLOWED_ADMIN_IPS`가 비어 있으면 관리자 API는 거부됩니다.
 

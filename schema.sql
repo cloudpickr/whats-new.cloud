@@ -56,3 +56,15 @@ CREATE TABLE IF NOT EXISTS translation_job_state (
 
 CREATE INDEX IF NOT EXISTS idx_translation_job_state_updated_at
 ON translation_job_state(updated_at);
+
+-- Durable gate decisions for already-translated Korean cards. translation_job_state
+-- is wiped after a few minutes, so it cannot remember a skip or a failed refresh.
+CREATE TABLE IF NOT EXISTS quality_refresh_check (
+  article_id INTEGER NOT NULL,
+  lang TEXT NOT NULL,
+  rule TEXT NOT NULL,
+  decision TEXT NOT NULL,
+  reasons TEXT NOT NULL DEFAULT '',
+  checked_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (article_id, lang)
+);
