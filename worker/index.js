@@ -101,8 +101,14 @@ function getReviewModel(env) {
 // v2 (2026-08-30): 1–2 sentence summaries, no padding/restating, title/acronym/imperative checks.
 // Bumping this tag re-queues every Korean card through enqueueFluentKoreanRefresh (FLUENT_REFRESH_DAILY_CAP per day).
 const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v2';
-const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
+const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual', 'quality_refresh']);
 const FLUENT_REFRESH_BATCH_SIZE = 4;
+// Gate reasons that must not spend a retranslation. Title length is the common
+// one and already soft-passes inside the translation pipeline.
+const SOFT_QUALITY_REASONS = new Set(['title-too-long']);
+// Bump when the hard/soft split changes so stored decisions are scored again.
+const QUALITY_REFRESH_RULE = 'hard-v1';
+const QUALITY_REFRESH_SCORE_BATCH = 20;
 // Default daily cap for the OPTIONAL fluent-Korean refresh pass (re-polishing
 // cards that already passed translation + AI review). This never gates new
 // article translation or the AI quality review — only how fast already-good
@@ -1364,6 +1370,14 @@ function assessTranslationQuality(record, row, lang) {
   };
 }
 
+// skip: keep the stored card. refresh: one retranslation, and only replace the
+// card when the new text passes this same gate.
+function qualityRefreshAction(reasons) {
+  const list = Array.isArray(reasons) ? reasons : [];
+  if (list.length === 0 || list.every((reason) => SOFT_QUALITY_REASONS.has(reason))) return 'skip';
+  return 'refresh';
+}
+
 function applyQualitySuggestions(record, review) {
   const next = { ...record };
   const suggestedTitle = String(review?.suggested_title || '').trim();
@@ -1681,6 +1695,9 @@ async function runReviewPipeline(env, row, lang, hint = '') {
   const reviewed = await reviewTranslationQualityWithAI(env, row, record, lang, hint);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
   await persistTranslationRecord(env, row, finalRecord, lang, getReviewModel(env), { isReview: true });
+  // The review may have rewritten the card. Drop the old gate decision so the
+  // next refresh pass scores the text readers actually see.
+  if (lang === 'ko') await deleteQualityRefreshCheck(env, row.id, lang);
   return { ok: true };
 }
 
@@ -1699,8 +1716,7 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
   // Final quality gate
   const quality = assessTranslationQuality(finalRecord, row, lang);
   // Soft rules: worth one retry with a hint, but a long title should not leave the card stuck on the old text.
-  const SOFT_REASONS = new Set(['title-too-long']);
-  const onlySoft = !quality.pass && quality.reasons.every((r) => SOFT_REASONS.has(r));
+  const onlySoft = !quality.pass && qualityRefreshAction(quality.reasons) === 'skip';
   if (onlySoft && reason === 'quality_retry') {
     console.log(`quality soft-pass article=${row.id} lang=${lang} reasons=${quality.reasons.join(',')}`);
     quality.pass = true;
@@ -1724,6 +1740,7 @@ async function queueArticleRetranslation(env, articleId, lang = DEFAULT_QUEUE_LA
   const row = await getArticleForTranslation(env, articleId);
   if (!row) return { found: false, queued: 0 };
   await releaseTranslationJobs(env, [{ articleId, lang }]);
+  await deleteQualityRefreshCheck(env, articleId, lang);
   await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(articleId, lang).run();
   const queued = await enqueueTranslationJobs(env, [{ articleId, lang, reason, hint }]);
   return { found: true, queued };
@@ -1792,7 +1809,7 @@ async function getFluentRefreshInFlightCount(env) {
   const row = await env.DB.prepare(`
     SELECT count(*) as count
     FROM translation_job_state
-    WHERE lang = 'ko' AND reason IN ('fluent_refresh', 'quality_retry', 'manual')
+    WHERE lang = 'ko' AND reason IN ('fluent_refresh', 'quality_retry', 'manual', 'quality_refresh')
   `).first();
   return row?.count || 0;
 }
@@ -1844,6 +1861,129 @@ async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE
   return enqueueTranslationJobs(env, jobs, { skipClaim: true });
 }
 
+let qualityRefreshReady = false;
+async function ensureQualityRefreshTable(env) {
+  if (qualityRefreshReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS quality_refresh_check (
+      article_id INTEGER NOT NULL,
+      lang TEXT NOT NULL,
+      rule TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      reasons TEXT NOT NULL DEFAULT '',
+      checked_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (article_id, lang)
+    )
+  `).run();
+  qualityRefreshReady = true;
+}
+
+async function recordQualityRefreshCheck(env, articleId, lang, decision, reasons) {
+  await ensureQualityRefreshTable(env);
+  await env.DB.prepare(`
+    INSERT INTO quality_refresh_check (article_id, lang, rule, decision, reasons, checked_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(article_id, lang) DO UPDATE SET
+      rule = excluded.rule,
+      decision = excluded.decision,
+      reasons = excluded.reasons,
+      checked_at = datetime('now')
+  `).bind(articleId, lang, QUALITY_REFRESH_RULE, decision, (reasons || []).join(',')).run();
+}
+
+async function deleteQualityRefreshCheck(env, articleId, lang) {
+  await ensureQualityRefreshTable(env);
+  await env.DB.prepare('DELETE FROM quality_refresh_check WHERE article_id = ? AND lang = ?').bind(articleId, lang).run();
+}
+
+// Score reviewed Korean cards with the production gate. Soft failures stay.
+// Hard failures get one retranslation, sharing the fluent-refresh daily cap
+// so the two passes cannot each spend 100 cards.
+async function enqueueQualityGateRefresh(env, scoreLimit = QUALITY_REFRESH_SCORE_BATCH) {
+  await ensureQualityRefreshTable(env);
+  await ensureTranslationJobStateTable(env);
+  const budget = await getFluentRefreshBudget(env, FLUENT_REFRESH_BATCH_SIZE);
+  const rows = await env.DB.prepare(`
+    SELECT lc.article_id, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status,
+           a.title_en, a.description_en
+    FROM localized_content lc
+    JOIN articles a ON a.id = lc.article_id
+    WHERE lc.lang = 'ko'
+      AND lc.reviewed_at IS NOT NULL
+      AND IFNULL(lc.model_used, '') != 'manual'
+      AND NOT EXISTS (
+        SELECT 1 FROM translation_job_state s
+        WHERE s.article_id = lc.article_id AND s.lang = 'ko'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM quality_refresh_check c
+        WHERE c.article_id = lc.article_id AND c.lang = 'ko' AND c.rule = ?
+          AND (
+            c.decision IN ('skip', 'replaced', 'failed')
+            OR (c.decision = 'queued' AND c.checked_at >= datetime('now', '-30 minutes'))
+          )
+      )
+    ORDER BY lc.pub_date DESC
+    LIMIT ?
+  `).bind(QUALITY_REFRESH_RULE, scoreLimit).all();
+
+  const skips = [];
+  const jobs = [];
+  for (const row of rows.results || []) {
+    const quality = assessTranslationQuality({
+      title: row.title,
+      summary: row.summary,
+      target: row.target,
+      features: row.features,
+      regions: row.regions,
+      status: row.status,
+    }, { title_en: row.title_en, description_en: row.description_en }, 'ko');
+    if (qualityRefreshAction(quality.reasons) === 'skip') {
+      skips.push({ articleId: row.article_id, reasons: quality.reasons });
+      continue;
+    }
+    if (jobs.length < budget) {
+      jobs.push({ articleId: row.article_id, lang: 'ko', reason: 'quality_refresh', refresh: true, reasons: quality.reasons });
+    }
+  }
+
+  if (skips.length) {
+    await env.DB.batch(skips.map((item) => env.DB.prepare(`
+      INSERT INTO quality_refresh_check (article_id, lang, rule, decision, reasons, checked_at)
+      VALUES (?, 'ko', ?, 'skip', ?, datetime('now'))
+      ON CONFLICT(article_id, lang) DO UPDATE SET
+        rule = excluded.rule,
+        decision = excluded.decision,
+        reasons = excluded.reasons,
+        checked_at = datetime('now')
+    `).bind(item.articleId, QUALITY_REFRESH_RULE, item.reasons.join(','))));
+  }
+
+  let queued = 0;
+  if (jobs.length) {
+    await env.DB.batch(jobs.map((job) => env.DB.prepare(`
+      INSERT INTO translation_job_state (article_id, lang, reason, updated_at)
+      VALUES (?, 'ko', 'quality_refresh', datetime('now'))
+      ON CONFLICT(article_id, lang) DO UPDATE SET
+        reason = excluded.reason,
+        updated_at = datetime('now')
+    `).bind(job.articleId)));
+    queued = await enqueueTranslationJobs(env, jobs.map(({ articleId, lang, reason, refresh }) => ({ articleId, lang, reason, refresh })), { skipClaim: true });
+    await env.DB.batch(jobs.map((job) => env.DB.prepare(`
+      INSERT INTO quality_refresh_check (article_id, lang, rule, decision, reasons, checked_at)
+      VALUES (?, 'ko', ?, 'queued', ?, datetime('now'))
+      ON CONFLICT(article_id, lang) DO UPDATE SET
+        rule = excluded.rule,
+        decision = excluded.decision,
+        reasons = excluded.reasons,
+        checked_at = datetime('now')
+    `).bind(job.articleId, QUALITY_REFRESH_RULE, job.reasons.join(','))));
+  }
+
+  console.log(`quality refresh scored=${(rows.results || []).length} skipped=${skips.length} queued=${queued} budget=${budget}`);
+  return { scored: (rows.results || []).length, skipped: skips.length, queued, budget, cap: getFluentRefreshDailyCap(env) };
+}
+
 export { parseRSS, fetchRSS };
 
 // Pure translation-pipeline pieces reused by the offline model evaluation
@@ -1862,6 +2002,7 @@ export {
   buildVendorPromptHints,
   applyDeterministicFixes,
   assessTranslationQuality,
+  qualityRefreshAction,
   parseAIResponse,
   buildReviewMessages,
   applyReviewEdits,
@@ -1893,6 +2034,8 @@ export default {
           await enqueueTranslationJobs(env, jobs, { skipClaim: true });
         }
       }
+      const qualityQueued = await enqueueQualityGateRefresh(env);
+      if (qualityQueued.queued) console.log(`Quality gate refresh queued: ${qualityQueued.queued}`);
       const fluentQueued = await enqueueFluentKoreanRefresh(env, FLUENT_REFRESH_BATCH_SIZE);
       if (fluentQueued) console.log(`Fluent Korean refresh queued: ${fluentQueued}`);
     }
@@ -1994,7 +2137,18 @@ export default {
 
         const result = await runTranslationPipeline(env, row, lang, reason, hint, { refresh: isRefresh });
         if (result?.ok) {
+          if (reason === 'quality_refresh') await recordQualityRefreshCheck(env, articleId, lang, 'replaced', []);
           await releaseTranslationJobs(env, [{ articleId, lang }]);
+          msg.ack();
+          continue;
+        }
+
+        // A failed quality refresh keeps the previous card. A second try can
+        // soft-pass and overwrite a readable card with a worse one.
+        if (reason === 'quality_refresh') {
+          await recordQualityRefreshCheck(env, articleId, lang, 'failed', result?.reasons || []);
+          await releaseTranslationJobs(env, [{ articleId, lang }]);
+          console.log(`quality refresh kept previous article=${articleId} lang=${lang} reasons=${(result?.reasons || []).join(',')}`);
           msg.ack();
           continue;
         }
@@ -2241,6 +2395,13 @@ export default {
         `).run();
         return jsonResponse({ released: res.meta?.changes ?? 0 }, {}, headers);
       }
+      if (action === 'quality-refresh') {
+        const requested = parseInt(url.searchParams.get('limit') || String(QUALITY_REFRESH_SCORE_BATCH), 10);
+        const scoreLimit = Math.min(Math.max(requested || QUALITY_REFRESH_SCORE_BATCH, 1), 50);
+        const result = await enqueueQualityGateRefresh(env, scoreLimit);
+        return jsonResponse(result, {}, headers);
+      }
+
       if (action === 'refresh-ko') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 50);
         const queued = await enqueueFluentKoreanRefresh(env, limit);
@@ -2272,7 +2433,8 @@ export default {
         const message = statsAuth.reason === 'missing_key_ring' ? 'API_KEY_RING is not configured' : 'Unauthorized';
         return jsonResponse({ error: message }, { status }, headers);
       }
-      const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday] = await Promise.all([
+      await ensureQualityRefreshTable(env);
+      const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday, qualityDecisions, qualityFailed] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
         env.DB.prepare(`SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
@@ -2291,7 +2453,24 @@ export default {
           WHERE lang = 'ko' AND model_used = ?
             AND date(translated_at) = date('now')
         `).bind(FLUENT_KOREAN_MODEL_TAG).first(),
+        env.DB.prepare(`
+          SELECT decision, count(*) as count
+          FROM quality_refresh_check
+          WHERE lang = 'ko' AND rule = ?
+          GROUP BY decision
+        `).bind(QUALITY_REFRESH_RULE).all(),
+        env.DB.prepare(`
+          SELECT article_id, reasons, checked_at
+          FROM quality_refresh_check
+          WHERE lang = 'ko' AND rule = ? AND decision = 'failed'
+          ORDER BY checked_at DESC
+          LIMIT 20
+        `).bind(QUALITY_REFRESH_RULE).all(),
       ]);
+      const qualityCounts = { skip: 0, queued: 0, replaced: 0, failed: 0 };
+      for (const row of qualityDecisions.results || []) {
+        if (row.decision in qualityCounts) qualityCounts[row.decision] = row.count;
+      }
       return jsonResponse({
         by_lang: byLang.results,
         by_model: byModel.results,
@@ -2311,6 +2490,17 @@ export default {
           today: fluentToday?.count || 0,
           cap: getFluentRefreshDailyCap(env),
           tag: FLUENT_KOREAN_MODEL_TAG,
+        },
+        // failed_articles is the human queue: one refresh already failed the gate,
+        // so the previous card was kept. Retry those with action=retranslate&id=N.
+        quality_refresh: {
+          rule: QUALITY_REFRESH_RULE,
+          ...qualityCounts,
+          failed_articles: (qualityFailed.results || []).map((row) => ({
+            id: row.article_id,
+            reasons: row.reasons,
+            checked_at: row.checked_at,
+          })),
         },
       }, {}, headers);
     }
