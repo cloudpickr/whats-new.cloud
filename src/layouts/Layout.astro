@@ -134,12 +134,15 @@ const fontPreload: Record<string, string> = Object.fromEntries(
     {structuredDataItems.filter(Boolean).map((item) => (
       <script type="application/ld+json" set:html={JSON.stringify(item)} />
     ))}
+    {import.meta.env.PUBLIC_GA_MEASUREMENT_ID && (
+      <script
+        is:inline
+        async
+        src={`https://www.googletagmanager.com/gtag/js?id=${import.meta.env.PUBLIC_GA_MEASUREMENT_ID}`}
+      ></script>
+    )}
     <script is:inline define:vars={{ gaId: import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '' }}>
       if (gaId) {
-        const s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
-        document.head.appendChild(s);
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
