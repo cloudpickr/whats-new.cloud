@@ -53,6 +53,9 @@ jobs:
           # variable: gh variable set SITE_URL. astro.config.mjs reads it at
           # build time to drive canonical URLs and the sitemap.
           SITE_URL: ${{ vars.SITE_URL }}
+          # GA4 Measurement ID (public). Set as a repo variable:
+          # gh variable set PUBLIC_GA_MEASUREMENT_ID --body "G-RQRGQJ1WQR"
+          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
 
       # Deploy the unified Worker. @astrojs/cloudflare writes a deploy redirect
       # (.wrangler/deploy/config.json) that points `wrangler deploy` at the
