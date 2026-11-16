@@ -134,19 +134,24 @@ const fontPreload: Record<string, string> = Object.fromEntries(
     {structuredDataItems.filter(Boolean).map((item) => (
       <script type="application/ld+json" set:html={JSON.stringify(item)} />
     ))}
-    <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-Q4K37MHZ6X"></script>
-    <script is:inline>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-Q4K37MHZ6X', { send_page_view: false });
-      document.addEventListener('astro:page-load', () => {
-        gtag('event', 'page_view', {
-          page_title: document.title,
-          page_location: location.href,
-          page_path: location.pathname,
+    <script is:inline define:vars={{ gaId: import.meta.env.PUBLIC_GA_MEASUREMENT_ID || '' }}>
+      if (gaId) {
+        const s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', gaId, { send_page_view: false });
+        document.addEventListener('astro:page-load', () => {
+          gtag('event', 'page_view', {
+            page_title: document.title,
+            page_location: location.href,
+            page_path: location.pathname,
+          });
         });
-      });
+      }
     </script>
     <script is:inline>
       // Language persistence — runs during <head> parse, BEFORE any navigation
